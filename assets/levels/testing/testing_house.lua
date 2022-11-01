@@ -10,7 +10,7 @@ function on_init()
     -- table.insert(colors, Color.hex("#001522"))
     -- table.insert(colors, Color.hex("#750687"))
     -- table.insert(colors, Color.hex("#067587"))
-    Log.info("testing format {}, {}, {}, {}, and tables {}", 1, 3.14, 'str', true, {x = 5, y = 10})
+    Log.info("testing format {}, {}, {}, {}, and tables {}, and color {}", 1, 3.14, 'str', true, {x = 5, y = 10}, Color.hex("921b4b"))
 end
 
 local g_timeofday       = 1

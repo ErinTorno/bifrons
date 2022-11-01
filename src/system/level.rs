@@ -4,7 +4,7 @@ use bevy::{prelude::*, render::{render_resource::{FilterMode, SamplerDescriptor}
 use bevy_mod_scripting::{prelude::*};
 use iyes_loopless::prelude::IntoConditionalSystem;
 
-use crate::data::{level::*, geometry::{TextureMaterial, AtlasIndex}};
+use crate::data::{level::*, material::{TextureMaterial, AtlasIndex}};
 
 use super::texture::{MissingTexture, Background, ImageDescriptions};
 
@@ -85,6 +85,7 @@ pub fn reset_loaded_level(
         
         for (room_name, room) in level.rooms.iter() {
             for geometry in room.geometry.iter() {
+                let mut layer_scale = 1.;
                 for texname in geometry.materials.iter() {
                     let (material, texmat) = if texname == "background" {
                         (background.material.clone(), &background_texmat)
@@ -99,13 +100,14 @@ pub fn reset_loaded_level(
                         .insert_bundle(PbrBundle {
                             mesh: meshes.add(geometry.shape.mk_mesh(texmat, geometry.offset, AtlasIndex::default())),
                             material,
-                            transform: Transform::from_translation(room.pos + geometry.pos).with_rotation(
+                            transform: Transform::from_translation(room.pos + geometry.pos + (Vec3::new(0., (layer_scale - 1.) / 2., 0.))).with_rotation(
                                 Quat::from_rotation_x(geometry.rotation.x) *
                                 Quat::from_rotation_y(geometry.rotation.y) *
                                 Quat::from_rotation_z(geometry.rotation.z)
-                            ),
+                            ).with_scale(Vec3::splat(layer_scale)),
                             ..default()
                         });
+                        layer_scale += 0.0001;
                 }
             }
 

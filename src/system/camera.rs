@@ -15,6 +15,7 @@ impl Plugin for CameraPlugin {
             .register_type::<Focus>()
             .register_type::<Follow>()
             .add_startup_system(setup)
+            .add_system(cam_movement)
             // .add_system(follow_system)
         ;
     }
@@ -51,6 +52,12 @@ pub fn setup(
         transform: Transform::from_xyz(4.0, 4.0, 6.0).looking_at(Vec3::new(0., 2., 0.), Vec3::Y),
         ..default()
     });
+}
+
+pub fn cam_movement(
+    mut query: Query<(&mut Transform, With<Camera3d>)>,
+) {
+
 }
 
 #[derive(Clone, Component, Debug, Deserialize, PartialEq, Reflect, Serialize)]

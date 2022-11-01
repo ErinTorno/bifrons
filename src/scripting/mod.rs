@@ -2,7 +2,7 @@ use std::sync::Mutex;
 use ::std::time::Duration;
 
 use bevy::{prelude::*};
-use bevy_mod_scripting::{prelude::*, core::{event::ScriptLoaded}, lua::api::bevy::{LuaBevyAPIProvider, LuaWorld},};
+use bevy_mod_scripting::{prelude::*, core::{event::ScriptLoaded}, lua::api::bevy::{LuaBevyAPIProvider},};
 use iyes_loopless::prelude::FixedTimestepStage;
 
 use self::event::{ON_UPDATE, ON_INIT};
@@ -121,7 +121,13 @@ pub fn lua_to_string(value: LuaValue) -> Result<String, mlua::Error> {
             Ok(str)
         },
         Value::Thread(_) => Ok("#thread".to_string()),
-        Value::UserData(_) => Ok("#user_data".to_string()),
+        Value::UserData(data) => {
+            let meta = data.get_metatable()?;
+            if meta.contains(LuaMetaMethod::ToString)? {
+                let tostring: LuaFunction = meta.get(LuaMetaMethod::ToString)?;
+                Ok(tostring.call(Value::UserData(data))?)
+            } else { Ok("#userdata".to_string()) }
+        },
         // Value::Vector(x, y, z) => Ok(format!("{{x: {}, y: {}, z: {}}}", x, y, z)),
     }
 }

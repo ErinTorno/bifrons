@@ -27,28 +27,44 @@ struct RgbaColor {
     b: f32,
     a: f32,
 }
-impl<'lua> ToLua<'lua> for RgbaColor {
-    fn to_lua(self, lua: &'lua Lua) -> Result<LuaValue<'lua>, LuaError> {
-        let table = lua.create_table()?;
-        table.set("r", self.r)?;
-        table.set("g", self.g)?;
-        table.set("b", self.b)?;
-        table.set("a", self.a)?;
-        table.to_lua(lua)
+impl LuaUserData for RgbaColor {
+    fn add_fields<'lua, F: mlua::UserDataFields<'lua, Self>>(fields: &mut F) {
+        fields.add_field_method_get("r", |_, this| Ok(this.r));
+        fields.add_field_method_get("g", |_, this| Ok(this.g));
+        fields.add_field_method_get("b", |_, this| Ok(this.b));
+        fields.add_field_method_get("a", |_, this| Ok(this.a));
+        fields.add_field_method_set("r", |_, this, r| { this.r = r; Ok(()) });
+        fields.add_field_method_set("g", |_, this, g| { this.g = g; Ok(()) });
+        fields.add_field_method_set("b", |_, this, b| { this.b = b; Ok(()) });
+        fields.add_field_method_set("a", |_, this, a| { this.a = a; Ok(()) });
+        fields.add_field_method_get("hue", |_, this| Ok(<RgbaColor as Into<Color>>::into(this.clone()).as_hsla_f32()[0]) );
+        fields.add_field_method_set("hue", |_, this, hue| {
+            let color: Color = this.clone().into();
+            if let Color::Hsla { hue: _, saturation, lightness, alpha } = color.as_hsla() {
+                *this = Color::hsla(hue, saturation, lightness, alpha).into();
+            } else { unreachable!() }
+            Ok(())
+        });
+        fields.add_field_method_get("saturation", |_, this| Ok(<RgbaColor as Into<Color>>::into(this.clone()).as_hsla_f32()[1]) );
+        fields.add_field_method_set("saturation", |_, this, saturation| {
+            let color: Color = this.clone().into();
+            if let Color::Hsla { hue, saturation: _, lightness, alpha } = color.as_hsla() {
+                *this = Color::hsla(hue, saturation, lightness, alpha).into();
+            } else { unreachable!() }
+            Ok(())
+        });
+        fields.add_field_method_get("lightness", |_, this| Ok(<RgbaColor as Into<Color>>::into(this.clone()).as_hsla_f32()[2]) );
+        fields.add_field_method_set("lightness", |_, this, lightness| {
+            let color: Color = this.clone().into();
+            if let Color::Hsla { hue, saturation, lightness: _, alpha } = color.as_hsla() {
+                *this = Color::hsla(hue, saturation, lightness, alpha).into();
+            } else { unreachable!() }
+            Ok(())
+        });
     }
-}
-impl<'lua> FromLua<'lua> for RgbaColor {
-    fn from_lua(value: mlua::Value<'lua>, _: &'lua Lua) -> Result<Self, mlua::Error> {
-        match value {
-            Value::Table(table) => {
-                let r = table.get("r")?;
-                let g = table.get("g")?;
-                let b = table.get("b")?;
-                let a = table.get("a").unwrap_or(1.);
-                Ok(RgbaColor { r, g, b, a })
-            }
-            _ => Err(mlua::Error::SerializeError(format!("Expected {{r: num[0..1], g: num[0..1], b: num[0..1], a: num[0..1]}}, found {:?}", value))),
-        }
+
+    fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(format!("{:?}", this)));
     }
 }
 impl From<Color> for RgbaColor {

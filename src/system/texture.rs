@@ -143,7 +143,6 @@ pub fn setup_default_textures(
 ) {
     background.material = materials.add(StandardMaterial {
         base_color: Color::BLACK,
-        alpha_mode: AlphaMode::Blend,
         unlit: true,
         ..default()
     });
@@ -180,7 +179,6 @@ pub fn setup_default_textures(
     missing_tex.image = images.add(image);
     missing_tex.material = materials.add(StandardMaterial {
         base_color_texture: Some(missing_tex.image.clone()),
-        alpha_mode: AlphaMode::Blend,
         unlit: true,
         ..default()
     });

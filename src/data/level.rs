@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use bevy::{prelude::*, utils::BoxedFuture, asset::*, reflect::TypeUuid};
 use serde::{Deserialize, Serialize};
 
-use super::geometry::{TextureMaterial, Geometry, Light};
+use super::{geometry::{Geometry, Light}, material::TextureMaterial};
 use crate::util::serialize::*;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{util::serialize::*, system::texture::{MaterialColors, ImageDescriptions, Background}};
 
-use super::geometry::*;
+use super::{geometry::*, material::*};
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
 pub struct AxisChange {
@@ -90,7 +90,6 @@ impl Animation {
                 } else {
                     warn!("Material \"{}\" not found for Animation SpritePart {}", mat_name, part_name);
                     (materials.add(StandardMaterial {
-                        alpha_mode: AlphaMode::Blend,
                         unlit: true,
                         ..default()
                     }), TextureMaterial::MISSING)
@@ -101,7 +100,6 @@ impl Animation {
                 } else {
                     warn!("No material given for Animation SpritePart {}", part_name);
                     (materials.add(StandardMaterial {
-                        alpha_mode: AlphaMode::Blend,
                         unlit: true,
                         ..default()
                     }), TextureMaterial::MISSING)

@@ -39,6 +39,7 @@ Actor(
                 layer:            Background,
                 texture:          "actors/player/placeholder/labolas.png",
                 atlas:            (rows: 2, columns: 6, width: 204, height: 344),
+                alpha_blend:      true,
             ),
         },
     ),
