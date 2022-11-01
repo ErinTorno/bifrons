@@ -1,0 +1,45 @@
+#![enable(implicit_some)]
+Actor(
+    lines: {
+        "name": "Labolas",
+    },
+    animation: (
+        atlas:  (rows: 2, columns: 6, width: 204, height: 344),
+        height: 1.5,
+        attachments: {
+            "head":       ( pos: (0.,   1.30, 0.) ),
+            "hand_left":  ( pos: (0.72, 0.52, 0.) ),
+            "hand_right": ( pos: (0.22, 0.52, 0.) ),
+        },
+        frames: {
+            "idle": [
+                (delay: 0.2, atlas: (row: 0, col: 0)),
+                (delay: 0.2, atlas: (row: 0, col: 1), scale: (x: 1.01, y: 0.99)),
+                (delay: 0.2, atlas: (row: 0, col: 2)),
+                (delay: 0.2, atlas: (row: 0, col: 3), scale: (x: 0.991, y: 1.005)),
+                (delay: 0.2, atlas: (row: 0, col: 4)),
+                (delay: 0.2, atlas: (row: 0, col: 5), scale: (x: 1.006, y: 1.011)),
+            ],
+        },
+        parts: {
+            "bkg": (layer: Background, material: "bkg", atlas_offset: (row: 1, col: 0)),
+            "out": (layer: Outline,    material: "out"),
+        },
+        materials: {
+            // implicit "background" material that is a fill of the current background
+            "out": (
+                layer:            Outline,
+                color:            "#f64560",
+                texture:          "actors/player/placeholder/labolas.png",
+                emissive_texture: "actors/player/placeholder/labolas.png",
+                emissive_color:   "#3b2e0d",
+                atlas:            (rows: 2, columns: 6, width: 204, height: 344),
+            ),
+            "bkg": (
+                layer:            Background,
+                texture:          "actors/player/placeholder/labolas.png",
+                atlas:            (rows: 2, columns: 6, width: 204, height: 344),
+            ),
+        },
+    ),
+)

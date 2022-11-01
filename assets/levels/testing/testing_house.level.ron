@@ -1,0 +1,67 @@
+#![enable(implicit_some)]
+Level(
+    name:    "Testing House",
+    scripts: ["levels/testing/testing_house.lua"],
+    player_spawn: [
+        (room: "foyer", grid: "main", pos: (5, 5)),
+    ],
+    background: "#100f14",
+    skybox:     "skybox/space.ktx2",
+    materials: {
+        // implicit "background" material that is a fill of the current background
+        "floor": (
+            layer: Outline,
+            color: "#4b4158",
+            texture: "tiles/floor_squiggle.png",
+            // normal: "tiles/floor_squiggle_n.png",
+            mode: Repeat(step: 2., on_step: Rotate180),
+        ),
+    },
+    rooms: {
+        "all": (
+            pos: (0., 0., 0.),
+            keep_loaded: true,
+            reveal_before_entry: true,
+            lights: [
+                (
+                    pos: (0.2, 4., 0.5),
+                    color: "#9cabb1",
+                    kind: Directional(intensity: 0.3),
+                ),
+            ],
+        ),
+        "foyer": (
+            pos: (0., 0., 0.),
+            reveal_before_entry: true,
+            grid: {
+                "main": (
+                    shape: Rect(w: 10, h: 10),
+                ),
+            },
+            geometry: [
+                (
+                    label:     "floor",                    // label, optional, scripts can get this geometry from this
+                    pos:       (0., 0., 0.),               // where the center of the object is
+                    // shape:     Box(w: 12., h: 1., d: 12.), // what shape/porportions the geometry has
+                    shape:     Quad(w: 10., h: 10.), // what shape/porportions the geometry has
+                    rotation:  (-1.57079632679, 0., 0.),
+                    materials: ["background", "floor"],    // what materials are drawn in order; in this case, we fill the shape with the background color, and then draw the floor material over it
+                ),
+            ],
+            lights: [
+                (
+                    pos: (0.19, 4., -2.5),
+                    color: "#f3d79b",
+                    shadows_enabled: true,
+                    kind: Point(target: (0., 0., 0.), intensity: 10000.),
+                ),
+                (
+                    pos: (0.17, 4., 2.5),
+                    color: "#f3d79b",
+                    shadows_enabled: true,
+                    kind: Point(intensity: 10000.),
+                ),
+            ]
+        ),
+    },
+)
