@@ -15,11 +15,13 @@ pub enum RepeatType {
 pub enum MaterialMode {
     Stretch,
     Repeat {
+        #[serde(default = "default_step")]
         step:    f32,
         #[serde(default = "default_on_step")]
         on_step: RepeatType,
     },
 }
+fn default_step() -> f32 { 1. }
 fn default_on_step() -> RepeatType { RepeatType::Identity }
 impl Default for MaterialMode {
     fn default() -> Self { MaterialMode::Stretch }
@@ -106,8 +108,8 @@ impl TextureMaterial {
             unlit: self.layer == ColorLayer::Background,
             metallic: self.metallic,
             reflectance: self.reflectance,
-            double_sided: true,
-            cull_mode: None,
+            // double_sided: true,
+            // cull_mode: None,
             ..default()
         }
     }

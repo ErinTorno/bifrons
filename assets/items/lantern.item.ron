@@ -1,0 +1,12 @@
+#![enable(implicit_some)]
+Item(
+    scripts: ["items/lantern.lua"],
+    // script_vars: r##"
+    //     Vars.lantern_color = Color.hex("#e09b4d")
+    // "##,
+    lines: {
+        "name": "Lantern",
+    },
+    tags: ["lightsource", "weapon"],
+    equip_slots: ["hand_left", "hand_right"],
+)

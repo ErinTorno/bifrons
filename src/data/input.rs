@@ -1,4 +1,4 @@
-use std::{cmp::*, collections::HashMap, hash::Hash, default};
+use std::{cmp::*, collections::HashMap, hash::Hash};
 
 use bevy::prelude::*;
 use bevy_inspector_egui::Inspectable;
@@ -13,8 +13,8 @@ pub enum JoystickSide {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum ScrollWheel {
-    Up   { sensitivity: f32 },
-    Down { sensitivity: f32 },
+    Up,
+    Down,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -23,47 +23,141 @@ pub enum InputCode {
     Mouse    (MouseButton),
     Scroll   (ScrollWheel),
     Gamepad  (GamepadButtonType),
+    Shoulder (GamepadAxisType),
     Joystick { side: JoystickSide, angle: f32, sensitivity: f32 },
 }
 
+#[derive(Clone, Debug, Inspectable, PartialEq)]
+pub enum InputData {
+    Binary      { pressed: bool },
+    Analog      { state: f32, },
+    Directional { state: f32, angle: f32 },
+    VecChain    { vecs: Vec<Vec2> },
+}
+impl InputData {
+    pub fn is_empty(&self) -> bool {
+        match self {
+            InputData::Binary { pressed }        => !pressed,
+            InputData::Analog { state }          => *state == 0.,
+            InputData::Directional { state, .. } => *state == 0.,
+            InputData::VecChain { vecs }         => vecs.is_empty(),
+        }
+    }
+
+    pub fn power(&self) -> f32 {
+        match self {
+            InputData::Binary { pressed }       => if *pressed { 1. } else { 0. },
+            InputData::Analog { state }          => *state,
+            InputData::Directional { state, .. } => *state,
+            InputData::VecChain { vecs }   => vecs.len() as f32,
+        }
+    }
+}
+impl Default for InputData {
+    fn default() -> Self {
+        InputData::Binary { pressed: false }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Inspectable, PartialEq)]
-pub enum InputTS {
+pub enum InputTime {
     #[default]
     NotPressed,
     JustPressed  { secs: f64 },
     Held         { secs: f64 },
     JustReleased { secs: f64 },
 }
-impl InputTS {
-    pub fn max_priority(self, other: Self) -> Self {
+impl PartialOrd for InputTime {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match self {
-            InputTS::NotPressed   => other,
-            InputTS::Held { secs: s1 } => match other {
-                InputTS::Held { secs: s2 } => if s1 >= s2 { self } else { other }
-                _ => self,
+            InputTime::NotPressed   => Some(if *other == InputTime::NotPressed { Ordering::Equal } else { Ordering::Less }),
+            InputTime::Held { secs: s1 } => match other {
+                InputTime::Held { secs: s2 } => s1.partial_cmp(s2),
+                _ => Some(Ordering::Greater),
             },
-            InputTS::JustReleased {..} => match other {
-                InputTS::Held {..} => other,
-                InputTS::JustPressed { secs} => InputTS::Held { secs },
-                _ =>                  self,
+            InputTime::JustReleased { secs: s1 } => match other {
+                InputTime::Held {..} => Some(Ordering::Less),
+                InputTime::JustPressed { secs: s2 } => s1.partial_cmp(s2),
+                _ =>                  Some(Ordering::Greater),
             },
-            InputTS::JustPressed  {..} => match other {
-                InputTS::Held {..} => other,
-                InputTS::JustReleased { secs} => InputTS::Held { secs },
-                _ =>                  self,
+            InputTime::JustPressed  { secs: s1 } => match other {
+                InputTime::Held {..} => Some(Ordering::Less),
+                InputTime::JustReleased { secs: s2 } => s1.partial_cmp(s2),
+                _ =>                  Some(Ordering::Greater),
             },
         }
     }
+}
+impl InputTime {
+    // pub fn cmp_priority<F>(self, other: Self, cmp: F) -> Self where F: Fn(f64, f64) -> Ordering {
+    //     match self {
+    //         InputTime::NotPressed   => other,
+    //         InputTime::Held { secs: s1 } => match other {
+    //             InputTime::Held { secs: s2 } => if cmp(s1, s2) == Ordering::Greater { self } else { other },
+    //             _ => self,
+    //         },
+    //         InputTime::JustReleased {..} => match other {
+    //             InputTime::Held {..} => other,
+    //             InputTime::JustPressed { secs } => InputTime::Held { secs },
+    //             _ =>                  self,
+    //         },
+    //         InputTime::JustPressed  {..} => match other {
+    //             InputTime::Held {..} => other,
+    //             InputTime::JustReleased { secs } => InputTime::Held { secs },
+    //             _ =>                  self,
+    //         },
+    //     }
+    // }
 
-    pub fn from_input<T>(input: &Input<T>, code: T, secs: f64) -> InputTS where T: Copy + Eq + Hash {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap_or(Ordering::Equal)
+    }
+
+    pub fn from_input<T>(input: &Input<T>, code: T, secs: f64) -> InputTime where T: Copy + Eq + Hash {
         if input.just_pressed(code) {
-            InputTS::JustPressed { secs }
+            InputTime::JustPressed { secs } // todo get analog control state
         } else if input.just_released(code) {
-            InputTS::JustReleased { secs }
+            InputTime::JustReleased { secs  }
         } else if input.pressed(code) {
-            InputTS::Held { secs }
+            InputTime::Held { secs }
         } else {
-            InputTS::NotPressed
+            InputTime::NotPressed
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Inspectable, PartialEq)]
+pub struct InputTS {
+    pub data: InputData,
+    pub time: InputTime,
+}
+impl InputTS {
+    pub fn combine(self, other: Self) -> Self {
+        if self.data.is_empty() {
+            other
+        } else if other.data.is_empty() {
+            self
+        } else {
+            match self.time.cmp(&other.time) {
+                Ordering::Equal => {
+                    let sp = self.data.power();
+                    let op = other.data.power();
+                    if sp >= op { self } else { other }
+                },
+                Ordering::Less => {
+                    InputTS { data: other.data, time: self.time }
+                },
+                Ordering::Greater => {
+                    InputTS { data: self.data, time: self.time }
+                },
+            }
+        }
+    }
+
+    pub fn power(&self) -> f32 {
+        match self.time {
+            InputTime::NotPressed => 0.,
+            _ => self.data.power(),
         }
     }
 }
@@ -91,10 +185,17 @@ pub struct ActionState {
     pub camera:     CameraType,
     pub inputs:     HashMap<String, InputTS>, // action -> last input start time
 }
+impl ActionState {
+    pub fn input_ts<S>(&self, s: S) -> InputTS where S: AsRef<str> {
+        self.inputs.get(s.as_ref()).cloned().unwrap_or(InputTS::default())
+    }
+}
 
 #[derive(Clone, Component, Debug, Deserialize, PartialEq, Serialize)]
 pub struct InputMap {
     pub actions: HashMap<String, Vec<InputCode>>,
+    pub cam_speed: f32,
+    pub zoom_speed: f32,
 }
 impl Default for InputMap {
     fn default() -> Self {
@@ -103,13 +204,17 @@ impl Default for InputMap {
         actions.insert("back".into(),       vec![InputCode::Key(KeyCode::S)]);
         actions.insert("left".into(),       vec![InputCode::Key(KeyCode::A)]);
         actions.insert("right".into(),      vec![InputCode::Key(KeyCode::D)]);
+        actions.insert("rise".into(),       vec![InputCode::Key(KeyCode::Space)]);
+        actions.insert("fall".into(),       vec![InputCode::Key(KeyCode::LControl)]);
         actions.insert("cam_switch".into(), vec![InputCode::Key(KeyCode::LShift), InputCode::Mouse(MouseButton::Middle)]);
-        actions.insert("select".into(),     vec![InputCode::Key(KeyCode::Space),  InputCode::Mouse(MouseButton::Left)]);
+        actions.insert("select".into(),     vec![InputCode::Key(KeyCode::E),  InputCode::Mouse(MouseButton::Left)]);
         actions.insert("drag".into(),       vec![InputCode::Mouse(MouseButton::Right)]);
-        actions.insert("zoom_in".into(),    vec![InputCode::Key(KeyCode::Plus),  InputCode::Scroll(ScrollWheel::Up { sensitivity: 1. })]);
-        actions.insert("zoom_out".into(),   vec![InputCode::Key(KeyCode::Minus), InputCode::Scroll(ScrollWheel::Down { sensitivity: 1. })]);
+        actions.insert("zoom_in".into(),    vec![InputCode::Key(KeyCode::Plus),  InputCode::Scroll(ScrollWheel::Up)]);
+        actions.insert("zoom_out".into(),   vec![InputCode::Key(KeyCode::Minus), InputCode::Scroll(ScrollWheel::Down)]);
         InputMap {
             actions,
+            cam_speed: 10.,
+            zoom_speed: 20.,
         }
     }
 }

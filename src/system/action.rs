@@ -1,6 +1,6 @@
-use std::collections::hash_map::RawEntryMut;
+use std::{collections::{hash_map::RawEntryMut, HashMap}, f32::consts::PI};
 
-use bevy::prelude::*;
+use bevy::{prelude::*, input::mouse::MouseWheel};
 use bevy_inspector_egui::RegisterInspectable;
 
 use crate::data::input::*;
@@ -20,31 +20,86 @@ impl Plugin for ActionPlugin {
 pub fn update_action_state(
     time: Res<Time>,
     gamepad_input:      Res<Input<GamepadButton>>,
+    mut gamepad_events: EventReader<GamepadEvent>,
     keyboard_input:     Res<Input<KeyCode>>,
     mouse_button_input: Res<Input<MouseButton>>,
+    mut ev_scroll: EventReader<MouseWheel>,
     mut query: Query<(&mut ActionState, &InputMap)>,
 ) {
+    let mut scroll = 0.;
     let secs = time.seconds_since_startup();
+    let mut gamepad_axes = HashMap::<Gamepad, HashMap<GamepadAxisType, f32>>::new();
     for (mut action_state, mappings) in query.iter_mut() {
         for (action, inputs) in mappings.actions.iter() {
-            let mut max_ts = InputTS::NotPressed;
+            let mut max_ts = InputTS::default();
             for input in inputs {
-                max_ts = max_ts.max_priority(match input {
-                    InputCode::Key(code) => InputTS::from_input(&keyboard_input, *code, secs),
-                    InputCode::Mouse(code) => InputTS::from_input(&mouse_button_input, *code, secs),
+                max_ts = max_ts.combine(match input {
+                    InputCode::Key(code) => InputTS {
+                        time: InputTime::from_input(&keyboard_input, *code, secs),
+                        data: InputData::Binary { pressed: true }
+                    },
+                    InputCode::Mouse(code) => InputTS {
+                        time: InputTime::from_input(&mouse_button_input, *code, secs),
+                        data: InputData::Binary { pressed: true }
+                    },
                     InputCode::Gamepad(code) => if let Some(id) = action_state.gamepad_id {
                         let gamepad = Gamepad { id };
-                        InputTS::from_input(&gamepad_input, GamepadButton { gamepad, button_type: *code }, secs)
-                    } else { InputTS::NotPressed },
-                    _ => InputTS::NotPressed,
+                        InputTS {
+                            time: InputTime::from_input(&gamepad_input, GamepadButton { gamepad, button_type: *code }, secs),
+                            data: InputData::Binary { pressed: true }
+                        }
+                    } else { InputTS::default() },
+                    InputCode::Scroll(wheel) => {
+                        for ev in ev_scroll.iter() {
+                            scroll += ev.y;
+                        }
+                        if (scroll > 0. && *wheel == ScrollWheel::Up) || (scroll < 0. && *wheel == ScrollWheel::Down) {
+                            info!("scroll {} wheel {:?}", scroll, wheel);
+                            InputTS {
+                                time: InputTime::Held { secs },
+                                data: InputData::Directional { state: scroll, angle: if scroll > 0. { PI * 0.5 } else { PI * 1.5} },
+                            }
+                        } else {
+                            InputTS::default()
+                        }
+                    },
+                    InputCode::Joystick { side, angle, sensitivity } => { todo!() },
+                    InputCode::Shoulder(code) => if let Some(id) = action_state.gamepad_id {
+                        for event in gamepad_events.iter() {
+                            match event.event_type {
+                                GamepadEventType::AxisChanged(axis, state) => {
+                                    let hm = gamepad_axes.entry(event.gamepad).or_insert_with(|| HashMap::new());
+                                    hm.insert(axis, state);
+                                },
+                                _ => (),
+                            }
+                        }
+                        if let Some(id) = action_state.gamepad_id {
+                            let gamepad = Gamepad { id };
+                            if let Some(axes) = gamepad_axes.get(&gamepad) {
+                                if let Some(state) = axes.get(code) {
+                                    InputTS {
+                                        time: InputTime::Held { secs },
+                                        data: InputData::Analog { state: *state },
+                                    }
+                                } else { InputTS::default() }
+                            } else { InputTS::default() }
+                        } else { InputTS::default() }
+                        // let gamepad = Gamepad { id };
+
+                        // InputTS {
+                        //     time: InputTime::from_input(&gamepad_axis_input, GamepadAxis { gamepad, axis_type: *code }, secs),
+                        //     data: InputData::Binary { pressed: true }
+                        // }
+                    } else { InputTS::default() },
                 });
             }
             match action_state.inputs.raw_entry_mut().from_key(action) {
                 RawEntryMut::Occupied(mut e) => {
-                    e.insert(if max_ts == InputTS::NotPressed {
+                    e.insert(if max_ts.data.is_empty() {
                         max_ts
                     } else {
-                        max_ts.max_priority(*e.get())
+                        max_ts.combine(e.get().clone())
                     });
                 },
                 RawEntryMut::Vacant(e) => {

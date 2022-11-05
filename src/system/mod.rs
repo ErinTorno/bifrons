@@ -4,5 +4,6 @@ pub mod camera;
 pub mod common;
 pub mod editor;
 pub mod level;
-pub mod player;
+pub mod prefab;
+pub mod scene;
 pub mod texture;

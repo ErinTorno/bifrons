@@ -1,10 +1,10 @@
-use std::{collections::HashMap, f32::consts::PI};
+use std::{collections::HashMap};
 
-use bevy::{prelude::*, render::{render_resource::{FilterMode, SamplerDescriptor}, texture::ImageSampler}};
+use bevy::{prelude::*};
 use bevy_mod_scripting::{prelude::*};
 use iyes_loopless::prelude::IntoConditionalSystem;
 
-use crate::data::{level::*, material::{TextureMaterial, AtlasIndex}};
+use crate::data::{level::*, material::{TextureMaterial, AtlasIndex}, geometry::Shape, prefab::ToSpawnPrefab};
 
 use super::texture::{MissingTexture, Background, ImageDescriptions};
 
@@ -84,52 +84,74 @@ pub fn reset_loaded_level(
             .collect();
         
         for (room_name, room) in level.rooms.iter() {
-            for geometry in room.geometry.iter() {
-                let mut layer_scale = 1.;
-                for texname in geometry.materials.iter() {
-                    let (material, texmat) = if texname == "background" {
-                        (background.material.clone(), &background_texmat)
-                    } else if let Some(h) = lvl_mats.get(texname) {
-                        (h.clone(), &level.materials[texname])
-                    } else {
-                        warn!("room {} was unable to find material {}; using default", room_name, texname);
-                        (missing_tex.material.clone(), &missing_texmat)
-                    };
-                    commands.spawn()
-                        .insert(InRoom { room: room_name.clone() })
-                        .insert_bundle(PbrBundle {
-                            mesh: meshes.add(geometry.shape.mk_mesh(texmat, geometry.offset, AtlasIndex::default())),
-                            material,
-                            transform: Transform::from_translation(room.pos + geometry.pos + (Vec3::new(0., (layer_scale - 1.) / 2., 0.))).with_rotation(
-                                Quat::from_rotation_x(geometry.rotation.x) *
-                                Quat::from_rotation_y(geometry.rotation.y) *
-                                Quat::from_rotation_z(geometry.rotation.z)
-                            ).with_scale(Vec3::splat(layer_scale)),
-                            ..default()
-                        });
-                        layer_scale += 0.0001;
-                }
-            }
+            commands.spawn().insert_bundle(VisibilityBundle::default())
+                .insert_bundle(TransformBundle {
+                    local: Transform::from_translation(room.pos),
+                    ..TransformBundle::default()
+                })
+                .add_children(|parent| {
+                    for geometry in room.geometry.iter() {
+                        let mut layer_offset = 0.;
+                        parent.spawn()
+                            .insert_bundle(VisibilityBundle::default())
+                            .insert_bundle(TransformBundle {
+                                local: Transform::from_translation(geometry.pos).with_rotation(
+                                    Quat::from_rotation_x(geometry.rotation.x) *
+                                    Quat::from_rotation_y(geometry.rotation.y) *
+                                    Quat::from_rotation_z(geometry.rotation.z)
+                                ),
+                                ..TransformBundle::default()
+                            }).add_children(|parent| {
+                                for texname in geometry.materials.iter() {
+                                    let (material, texmat) = if texname == "background" {
+                                        (background.material.clone(), &background_texmat)
+                                    } else if let Some(h) = lvl_mats.get(texname) {
+                                        (h.clone(), &level.materials[texname])
+                                    } else {
+                                        warn!("room {} was unable to find material {}; using default", room_name, texname);
+                                        (missing_tex.material.clone(), &missing_texmat)
+                                    };
+                                    let mesh = meshes.add((match geometry.shape.clone() {
+                                        Shape::Quad { w, h, d } => Shape::Quad { w, h, d: d + layer_offset },
+                                        s => s,
+                                    }).mk_mesh(&asset_server, &texmat, Vec3::Z * layer_offset / 2., AtlasIndex::default()));
+                                    parent.spawn()
+                                        .insert(InRoom { room: room_name.clone() })
+                                        .insert_bundle(PbrBundle {
+                                            mesh,
+                                            material,
+                                            //transform: Transform::from_translation(geometry.offset + Vec3::Z * layer_offset / 2.),//.with_scale(Vec3::splat(layer_offset + 1.)),
+                                            ..default()
+                                        });
+                                        layer_offset += 0.001;
+                                }
+                            });
+                    }
+        
+                    for light in room.lights.iter() {
+                        let mut light_builder = parent.spawn();
+                        light.insert_bundle(&mut light_builder, Vec3::ZERO);
+                    }
 
-            for light in room.lights.iter() {
-                let entity = light.spawn(&mut commands, room.pos);
-                commands.entity(entity).insert(InRoom { room: room_name.clone() });
-            }
+                    for prefab in room.prefabs.iter() {
+                        if prefab.room_child {
+                            parent.spawn()
+                                .insert_bundle(TransformBundle {
+                                    local: Transform::from_translation(match prefab.at {
+                                        PrefabLocation::Free(v) => v,
+                                        _ => { unimplemented!() },
+                                    }),
+                                    ..default()
+                                })
+                                .insert_bundle(VisibilityBundle::default())
+                                .insert(ToSpawnPrefab { handle: asset_server.load(&prefab.asset) });
+                        } else {
+                            todo!();
+                        }
+                    }
+                });
         }
-            
-        // commands.spawn().insert_bundle(PbrBundle {
-        //     mesh: meshes.add(Mesh::from(shape::Plane { size: 5.0 })),
-        //     material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
-        //     ..default()
-        // });
-            
-        // commands.spawn().insert_bundle(PbrBundle {
-        //     mesh: meshes.add(Mesh::from(shape::Plane { size: 3.0 })),
-        //     transform: Transform::from_rotation(Quat::from_rotation_x(PI / 2.)),
-        //     material: materials.add(Color::rgb(0.5, 0.2, 0.5).into()),
-        //     ..default()
-        // });
-
+        
         commands.entity(st.level_entity)
             .remove::<ScriptCollection::<LuaFile>>()
             .insert(ScriptCollection::<LuaFile> {

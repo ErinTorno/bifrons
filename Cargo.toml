@@ -7,7 +7,7 @@ license-file = "agpl-3.0.txt"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bevy = { version = "0.8.1", default-features = false, features = ["bevy_asset", "bevy_winit", "render", "png", "serialize", "x11"] }
+bevy = { version = "0.8.1", default-features = false, features = ["animation", "bevy_asset", "bevy_gilrs", "bevy_gltf", "bevy_scene", "bevy_winit", "render", "png", "serialize", "x11"] }
 bevy_egui = "0.16.1"
 bevy-inspector-egui = "0.13.0"
 bevy_kira_audio = { version = "0.12.0", features = ["flac", "mp3", "ogg", "wav"] }

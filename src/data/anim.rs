@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
-use bevy::{prelude::{Vec2, warn, Color, Vec3, ChildBuilder, Handle, Image, StandardMaterial, AlphaMode, PbrBundle, Assets, Visibility, Transform, AssetServer}, render::{mesh::{Mesh, Indices}, render_resource::PrimitiveTopology}, time::Timer, utils::default};
+use bevy::{prelude::{Vec2, warn, Color, Vec3, ChildBuilder, Handle, Image, StandardMaterial, AlphaMode, PbrBundle, Assets, Visibility, Transform, AssetServer, Component}, render::{mesh::{Mesh, Indices}, render_resource::PrimitiveTopology}, time::Timer, utils::default, scene::{SceneBundle, Scene}};
 use serde::{Deserialize, Serialize};
 
+use crate::system::common::ToInit;
 use crate::{util::serialize::*, system::texture::{MaterialColors, ImageDescriptions, Background}};
 
 use super::{geometry::*, material::*};
@@ -39,6 +40,7 @@ impl Default for ColorLayer {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SpritePart {
     pub layer: ColorLayer,
+    pub shape: Shape,
     #[serde(default)]
     pub material: Option<String>,
     #[serde(default)]
@@ -51,6 +53,25 @@ pub struct SpritePart {
 fn default_start_enabled() -> bool { true }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ScenePart {
+    pub asset: String,
+    #[serde(default)]
+    pub offset: Vec3,
+    #[serde(default)]
+    pub mat_overrides: HashMap<String, String>,
+}
+#[derive(Clone, Component, Debug, Default)]
+pub struct SceneOverride {
+    pub mat_overrides: HashMap<String, Handle<StandardMaterial>>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum AnimPart {
+    Sprite(SpritePart),
+    Scene(ScenePart),
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Attachment {
     #[serde(default = "default_attachment_scale")]
     pub scale: Vec2,
@@ -60,16 +81,35 @@ fn default_attachment_scale() -> Vec2 { Vec2::ONE }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Animation {
-    pub atlas:  Atlas,
-    pub parts:  HashMap<String, SpritePart>,
+    pub parts:  HashMap<String, AnimPart>,
     pub frames: HashMap<String, Vec<Frame>>,
-    pub height: f32,
     #[serde(default)]
     pub attachments: HashMap<String, Attachment>,
     pub materials:   HashMap<String, TextureMaterial>,
 }
 
 impl Animation {
+    fn get_tex(
+        &self,
+        mat_name:     &String,
+        asset_server: &AssetServer,
+        descriptions: &mut ImageDescriptions,
+        background:   &Background,
+        materials:    &mut Assets<StandardMaterial>,
+    ) -> (Handle<StandardMaterial>, TextureMaterial) {
+        if mat_name.as_str() == "background" {
+            (background.material.clone(), TextureMaterial::BACKGROUND)
+        } else if let Some(mat) = self.materials.get(mat_name) {
+            (materials.add(mat.make_material(asset_server, descriptions)), mat.clone())
+        } else {
+            warn!("Material \"{}\" not found", mat_name);
+            (materials.add(StandardMaterial {
+                unlit: true,
+                ..default()
+            }), TextureMaterial::MISSING)
+        }
+    }
+
     pub fn add_parts(
         &self,
         parent:       &mut ChildBuilder,
@@ -82,52 +122,53 @@ impl Animation {
     ) {
         let mut layer = 0.;
         for (part_name, part) in self.parts.iter() {
-            let (material, tex_mat) = if let Some(mat_name) = part.material.as_ref() {
-                if mat_name.as_str() == "background" {
-                    (background.material.clone(), TextureMaterial::BACKGROUND)
-                } else if let Some(mat) = self.materials.get(mat_name) {
-                    (materials.add(mat.make_material(asset_server, descriptions)), mat.clone())
-                } else {
-                    warn!("Material \"{}\" not found for Animation SpritePart {}", mat_name, part_name);
-                    (materials.add(StandardMaterial {
-                        unlit: true,
-                        ..default()
-                    }), TextureMaterial::MISSING)
-                }
-            } else {
-                if part.layer == ColorLayer::Background {
-                    (background.material.clone(), TextureMaterial::BACKGROUND)
-                } else {
-                    warn!("No material given for Animation SpritePart {}", part_name);
-                    (materials.add(StandardMaterial {
-                        unlit: true,
-                        ..default()
-                    }), TextureMaterial::MISSING)
-                }
-            };
-            
-            mat_colors.layers.insert(material.clone_weak(), part.layer);
+            match part {
+                AnimPart::Sprite(part) => {
+                    let (material, texmat) = if let Some(mat_name) = part.material.as_ref() {
+                        self.get_tex(mat_name, asset_server, descriptions, background, materials)
+                    } else {
+                        if part.layer == ColorLayer::Background {
+                            (background.material.clone(), TextureMaterial::BACKGROUND)
+                        } else {
+                            warn!("No material given for Animation SpritePart {}", part_name);
+                            (materials.add(StandardMaterial {
+                                unlit: true,
+                                ..default()
+                            }), TextureMaterial::MISSING)
+                        }
+                    };
+                    
+                    mat_colors.layers.insert(material.clone_weak(), part.layer);
+        
+                    let pos = part.pos_offset.extend(0.);
+                    let mesh = meshes.add(part.shape.mk_mesh(asset_server, &texmat, part.pos_offset.extend(layer) + pos + (Vec3::Y * part.shape.height() / 2.), part.atlas_offset));
+        
+                    parent.spawn().insert_bundle(PbrBundle {
+                            mesh,
+                            transform: Transform::from_translation(Vec3::Y * 0.00001),
+                            material,
+                            ..default()
+                        }).insert(Visibility { is_visible: part.start_enabled });
+                    layer += 0.000001;
+                },
+                AnimPart::Scene(part) => {
+                    let mut mat_overrides = HashMap::new();
 
-            let units_per_pixel = if self.atlas.height <= 0. { 0. } else { self.height / self.atlas.height };
-            let pos = Vec3::new(
-                if self.atlas.height <= 0. { 0. } else { part.pos_offset.x * units_per_pixel },
-                if self.atlas.width  <= 0. { 0. } else { part.pos_offset.y * units_per_pixel },
-                0.,
-            );
+                    for (name, mat_name) in part.mat_overrides.iter() {
+                        let (material, _) = self.get_tex(mat_name, asset_server, descriptions, background, materials);
+                        mat_overrides.insert(name.clone(), material);
+                    }
 
-            let shape = Shape::Quad {
-                w: if self.atlas.height <= 0. { 0. } else { self.height * (self.atlas.width / self.atlas.height) },
-                h: self.height
-            };
-            let mesh = meshes.add(shape.mk_mesh(&tex_mat, part.pos_offset.extend(layer) + pos + (Vec3::Y * self.height / 2.), part.atlas_offset));
-
-            parent.spawn().insert_bundle(PbrBundle {
-                    mesh,
-                    transform: Transform::from_translation(Vec3::Y * 0.00001),
-                    material,
-                    ..default()
-                }).insert(Visibility { is_visible: part.start_enabled });
-            layer += 0.000001;
+                    parent.spawn()
+                        .insert_bundle(SceneBundle  {
+                            scene: asset_server.load(&part.asset),
+                            transform: Transform::from_translation(part.offset),
+                            ..default()
+                        }).insert(SceneOverride {
+                            mat_overrides,
+                        }).insert(ToInit::<Scene>::default());
+                },
+            }
         }
     }
 }
@@ -135,7 +176,6 @@ impl Animation {
 #[derive(Clone, Debug)]
 pub struct AnimationState {
     pub timer:           Timer,
-    pub atlas:           Atlas,
     pub atlas_idx:       AtlasIndex,
     pub animname:        String,
     pub frame_idx:       usize,
@@ -147,7 +187,6 @@ impl AnimationState {
         let mut st = AnimationState {
             timer:           Timer::from_seconds(100., true),
             animname:        animname.clone(),
-            atlas:           anim.atlas,
             frame_idx:       0,
             atlas_idx:       AtlasIndex::default(),
             time_boundaries: Vec::new(),

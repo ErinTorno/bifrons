@@ -1,11 +1,10 @@
 #![enable(implicit_some)]
-Actor(
+#![enable(unwrap_variant_newtypes)]
+(
     lines: {
         "name": "Labolas",
     },
     animation: (
-        atlas:  (rows: 2, columns: 6, width: 204, height: 344),
-        height: 1.5,
         attachments: {
             "head":       ( pos: (0.,   1.30, 0.) ),
             "hand_left":  ( pos: (0.72, 0.52, 0.) ),
@@ -22,22 +21,22 @@ Actor(
             ],
         },
         parts: {
-            "bkg": (layer: Background, material: "bkg", atlas_offset: (row: 1, col: 0)),
-            "out": (layer: Outline,    material: "out"),
+            "bkg": Sprite(layer: Background, shape: Quad(w: 0.771, h: 1.3), material: "bkg", atlas_offset: (row: 1, col: 0)),
+            "out": Sprite(layer: Outline,    shape: Quad(w: 0.771, h: 1.3), material: "out"),
         },
         materials: {
             // implicit "background" material that is a fill of the current background
             "out": (
                 layer:            Outline,
                 color:            "#f64560",
-                texture:          "actors/player/placeholder/labolas.png",
-                emissive_texture: "actors/player/placeholder/labolas.png",
-                emissive_color:   "#3b2e0d",
+                texture:          "chars/placeholder/labolas.png",
+                // emissive_texture: "chars/placeholder/labolas.png",
+                // emissive_color:   "#3b2e0d",
                 atlas:            (rows: 2, columns: 6, width: 204, height: 344),
             ),
             "bkg": (
                 layer:            Background,
-                texture:          "actors/player/placeholder/labolas.png",
+                texture:          "chars/placeholder/labolas.png",
                 atlas:            (rows: 2, columns: 6, width: 204, height: 344),
                 alpha_blend:      true,
             ),

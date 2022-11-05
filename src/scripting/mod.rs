@@ -5,10 +5,14 @@ use bevy::{prelude::*};
 use bevy_mod_scripting::{prelude::*, core::{event::ScriptLoaded}, lua::api::bevy::{LuaBevyAPIProvider},};
 use iyes_loopless::prelude::FixedTimestepStage;
 
+use crate::data::stat::{Stat, Pool};
+
 use self::event::{ON_UPDATE, ON_INIT};
 
 pub mod color;
+pub mod entity;
 pub mod event;
+pub mod geometry;
 pub mod level;
 pub mod log;
 pub mod time;
@@ -32,12 +36,27 @@ impl Plugin for ScriptPlugin {
             .add_api_provider::<LuaScriptHost<()>>(Box::new(LuaBevyAPIProvider))
             .add_api_provider::<LuaScriptHost<()>>(Box::new(PreludeAPIProvider))
             .add_api_provider::<LuaScriptHost<()>>(Box::new(color::ColorAPIProvider))
+            .add_api_provider::<LuaScriptHost<()>>(Box::new(entity::EntityAPIProvider))
+            .add_api_provider::<LuaScriptHost<()>>(Box::new(geometry::GeometryAPIProvider))
             .add_api_provider::<LuaScriptHost<()>>(Box::new(level::LevelAPIProvider))
             .add_api_provider::<LuaScriptHost<()>>(Box::new(log::LogAPIProvider))
             .add_api_provider::<LuaScriptHost<()>>(Box::new(time::TimeAPIProvider))
             .add_system(send_on_init)
             ;
     }
+}
+
+pub trait LuaMod {
+    fn mod_name() -> &'static str;
+
+    fn register_defs(ctx: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error>;
+}
+
+pub fn init_luamod<T>(ctx: &Lua) -> Result<(), mlua::Error> where T: LuaMod {
+    let mut table = ctx.create_table()?;
+    T::register_defs(ctx, &mut table)?;
+    ctx.globals().set(T::mod_name().to_string(), table)?;
+    Ok(())
 }
 
 pub fn send_on_init(
@@ -73,6 +92,8 @@ impl APIProvider for PreludeAPIProvider {
     fn attach_api(&mut self, ctx: &mut Self::APITarget) -> Result<(), ScriptError> {
         let ctx = ctx.get_mut().unwrap();
         attach_prelude_lua(ctx).map_err(ScriptError::new_other)?;
+        init_luamod::<Pool>(ctx).map_err(ScriptError::new_other)?;
+        init_luamod::<Stat>(ctx).map_err(ScriptError::new_other)?;
         Ok(())
     }
 }
@@ -114,10 +135,10 @@ pub fn lua_to_string(value: LuaValue) -> Result<String, mlua::Error> {
                 let (k, v) = pair?;
                 let key = lua_to_string(k)?;
                 let val = lua_to_string(v)?;
-                str += format!("{}{}: {}", if first { " " } else { ", " }, key, val).as_str();
+                str += format!("{}{} = {}", if first { "" } else { ", " }, key, val).as_str();
                 first = false;
             }
-            str += if first {"}"} else {" }"};
+            str += "}";
             Ok(str)
         },
         Value::Thread(_) => Ok("#thread".to_string()),

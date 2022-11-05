@@ -10,7 +10,20 @@ function on_init()
     -- table.insert(colors, Color.hex("#001522"))
     -- table.insert(colors, Color.hex("#750687"))
     -- table.insert(colors, Color.hex("#067587"))
-    Log.info("testing format {}, {}, {}, {}, and tables {}, and color {}", 1, 3.14, 'str', true, {x = 5, y = 10}, Color.hex("921b4b"))
+    Log.info("testing format {}, {}, {}, {}, and {}, and {}, and entity {}", 1, 3.14, 'str', true, {x = 5, y = 10}, Color.hex("921b4b"), entity)
+    -- Event.register("o")
+    -- Color.set_filter(function(color)
+    --     color.hue = color.hue + 180
+    --     return color
+    -- end)
+    
+    local light = Light.new(LightKind.point(1600, 20, 0))
+    -- local light = Light.new(LightKind.directional(28000.0, 10000.0))
+    -- local light = Light.new(LightKind.default_spotlight(Vec3.new(0, 0, 0)))
+    light.color = Color.hex("#f3d79b")
+    light.pos   = Vec3.new(0, 4, 0)
+    light.anim  = LightAnim.sin(0.15, 1.25) -- 0.1 * intensity over 0.5 seconds
+    -- light:spawn()
 end
 
 local g_timeofday       = 1

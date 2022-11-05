@@ -1,0 +1,39 @@
+#![enable(implicit_some)]
+#![enable(unwrap_variant_newtypes)]
+(
+    tags: ["furniture", "wood"],
+    // scripts: ["props/damageable.lua"],
+    attributes: (
+        pools: {
+            "health": (base: 6., current: 6.),
+        },
+        stats: {
+            "hardness": (base: 2),
+        },
+    ),
+    animation: (
+        frames: {
+            "idle": [],
+        },
+        parts: {
+            "table": Scene(asset: "props/furniture/end_table.gltf#Scene0", mat_overrides: {
+                "table":     "normal",
+                "table_bkg": "background",
+            }),
+        },
+        materials: {
+            "normal": (
+                layer:       Outline,
+                texture:     "props/furniture/end_table.png", // equiv to "props/furniture/end_table.gltf#Texture0"
+                alpha_blend: true,
+                color:       "#7a6260",
+            ),
+            "damaged": (
+                layer:       Outline,
+                texture:     "props/furniture/end_table_damaged.png",
+                alpha_blend: true,
+                color:       "#7a6260",
+            ),
+        },
+    ),
+)

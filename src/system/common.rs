@@ -15,6 +15,18 @@ impl<T> Default for ToInit<T>  {
     }
 }
 
+#[derive(Clone, Component, Copy, Debug, Inspectable)]
+pub struct ToInitWith<T: ?Sized, P> {
+    to_init: ToInit<T>,
+    params: P,
+}
+
+impl<T, P> Default for ToInitWith<T, P> where P: Default {
+    fn default() -> Self {
+        ToInitWith { to_init: ToInit::default(), params: P::default() }
+    }
+}
+
 pub fn easy_hash<H>(h: &H) -> u64 where H: Hash {
     let mut hasher = DefaultHasher::new();
     h.hash(&mut hasher);

@@ -1,9 +1,12 @@
-use std::f32::consts::FRAC_PI_4;
+use std::{f32::consts::FRAC_PI_4, collections::HashMap};
 
-use bevy::{prelude::*, render::{mesh::{Mesh, Indices}, render_resource::{PrimitiveTopology}}};
+use bevy::{prelude::*, render::{mesh::{Mesh, Indices}, render_resource::{PrimitiveTopology}}, ecs::{system::{Command, CommandQueue, EntityCommands}, world::EntityMut}};
+use bevy_inspector_egui::Inspectable;
+use bevy_mod_scripting::lua::api::bevy::{LuaWorld, LuaEntity};
+use mlua::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::{util::serialize::*};
+use crate::{util::serialize::*, scripting::{color::RgbaColor, geometry::LuaVec3, LuaMod}};
 
 use super::{material::*};
 
@@ -51,12 +54,29 @@ impl MeshBuilder {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum Shape {
-    Box { w: f32, h: f32, d: f32 },
-    Quad { w: f32, h: f32 },
+    Box {
+        w: f32,
+        h: f32,
+        d: f32
+    },
+    Quad {
+        w: f32,
+        h: f32,
+        #[serde(default = "default_quad_depth")]
+        d: f32
+    },
 }
+pub fn default_quad_depth() -> f32 { 0.0000001 }
 
 impl Shape {
-    pub fn mk_mesh(&self, mat: &TextureMaterial, offset: Vec3, idx: AtlasIndex) -> Mesh {
+    pub fn height(&self) -> f32 {
+        match self {
+            Shape::Box { h, .. } => *h,
+            Shape::Quad { h, .. } => *h,
+        }
+    }
+
+    pub fn mk_mesh(&self, asset_server: &AssetServer, mat: &TextureMaterial, offset: Vec3, idx: AtlasIndex) -> Mesh {
         let mut builder = MeshBuilder::default();
         let [uv_left, uv_right, uv_top, uv_bottom] = mat.get_uvs(idx);
         match self {
@@ -126,40 +146,60 @@ impl Shape {
                 // mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
                 // mesh.set_indices(Some(indices));
             },
-            Shape::Quad {w, h} => {
+            Shape::Quad {w, h, d} => {
                 let extent_x = w * 0.5;
                 let extent_y = h * 0.5;
                 match mat.mode {
                     MaterialMode::Stretch => {
-                        builder.push_indices(vec![0, 2, 1, 0, 3, 2]);
+                        builder.push_indices(vec![0, 2, 1, 0, 3, 2, 4, 6, 5, 4, 7, 6]);
                         let min_x = -extent_x + offset.x;
                         let max_x =  extent_x + offset.x;
                         let min_y = -extent_y + offset.y;
                         let max_y =  extent_y + offset.y;
+                        let back_z = offset.z - 0.0000001;
                         builder.push([min_x, min_y, offset.z], [0., 0., 1.], [uv_left,  uv_bottom]);
                         builder.push([min_x, max_y, offset.z], [0., 0., 1.], [uv_left,  uv_top]);
                         builder.push([max_x, max_y, offset.z], [0., 0., 1.], [uv_right, uv_top]);
                         builder.push([max_x, min_y, offset.z], [0., 0., 1.], [uv_right, uv_bottom]);
+                        builder.push([min_x, max_y, back_z], [0., 0., -1.], [uv_left,  uv_top]);
+                        builder.push([min_x, min_y, back_z], [0., 0., -1.], [uv_left,  uv_bottom]);
+                        builder.push([max_x, min_y, back_z], [0., 0., -1.], [uv_right, uv_bottom]);
+                        builder.push([max_x, max_y, back_z], [0., 0., -1.], [uv_right, uv_top]);
                     },
                     MaterialMode::Repeat { step, on_step } => {
-                        for y in 0..((h / step).abs().ceil() as i32) {
+                        let y_over = (h / step) - (h / step).floor();
+                        let x_over = (w / step) - (w / step).floor();
+
+                        let y_steps = (h / step).abs().ceil() as i32;
+                        for y in 0..y_steps {
                             let offset_y = step * y as f32 + offset.y;
                             let min_y = -extent_y + offset_y;
                             let max_y = (-extent_y + offset_y + step).min(extent_y + offset.y);
-                            for x in 0..((w / step).abs().ceil() as i32) {
+                            // let uv_right = if y == y_steps - 1 { 1. - y_over } else { uv_right };
+                            let uv_left = if y == y_steps - 1 { y_over } else { uv_left };
+                            let x_steps = (w / step).abs().ceil() as i32;
+                            for x in 0..x_steps {
                                 let offset_x = step * x as f32 + offset.x;
                                 let i = builder.len() as u32;
                                 builder.push_indices(vec![i + 0, i + 2, i + 1, i + 0, i + 3, i + 2]);
+                                builder.push_indices(vec![i + 4, i + 6, i + 5, i + 4, i + 7, i + 6]);
                                 let min_x = -extent_x + offset_x;
                                 let max_x = (-extent_x + offset_x + step).min(extent_x + offset.x);
+                                let uv_bottom = if x == x_steps - 1 { 1. - x_over } else { uv_bottom };
+                                // let uv_top = if x == x_steps - 1 { x_over } else { uv_top };
                                 let [uv_top, uv_bottom, uv_left, uv_right] = match on_step {
-                                    RepeatType::Rotate180 if (x + y) % 2 == 0 => [uv_right, uv_left, uv_bottom, uv_top],
+                                    RepeatType::Rotate180 if (x + y) % 2 == 0 && (y != y_steps - 1) && (x != x_steps - 1) => [uv_right, uv_left, uv_bottom, uv_top],
                                     _ => [uv_left, uv_right, uv_top, uv_bottom],
                                 };
+                                let back_z = offset.z - d;
                                 builder.push([min_x, min_y, offset.z], [0., 0., 1.], [uv_left,  uv_bottom]);
                                 builder.push([min_x, max_y, offset.z], [0., 0., 1.], [uv_left,  uv_top]);
                                 builder.push([max_x, max_y, offset.z], [0., 0., 1.], [uv_right, uv_top]);
                                 builder.push([max_x, min_y, offset.z], [0., 0., 1.], [uv_right, uv_bottom]);
+                                builder.push([min_x, max_y, back_z  ], [0., 0., -1.], [uv_left,  uv_top]);
+                                builder.push([min_x, min_y, back_z  ], [0., 0., -1.], [uv_left,  uv_bottom]);
+                                builder.push([max_x, min_y, back_z  ], [0., 0., -1.], [uv_right, uv_bottom]);
+                                builder.push([max_x, max_y, back_z  ], [0., 0., -1.], [uv_right, uv_top]);
                             }
                         }
                     },
@@ -220,6 +260,163 @@ pub fn default_range() -> f32 { 20. }
 pub fn default_radius() -> f32 { 0. }
 pub fn default_inner_angle() -> f32 { 0. }
 pub fn default_outer_angle() -> f32 { FRAC_PI_4 }
+impl LightKind {
+    pub fn default_directional() -> LightKind {
+        LightKind::Directional { illuminance: default_illuminance(), length: default_length() }
+    }
+    pub fn default_point() -> LightKind {
+        LightKind::Point { intensity: default_intensity(), range: default_range(), radius: default_radius() }
+    }
+    pub fn default_spotlight(target: Vec3) -> LightKind {
+        LightKind::SpotLight { target, intensity: default_intensity(), range: default_range(), radius: default_radius(), inner_angle: default_inner_angle(), outer_angle: default_outer_angle() }
+    }
+    pub fn value(&self) -> f32 {
+        match self {
+            LightKind::Directional { illuminance, .. } => *illuminance,
+            LightKind::Point { intensity, .. } => *intensity,
+            LightKind::SpotLight { intensity, .. } => *intensity,
+        }
+    }
+}
+impl LuaUserData for LightKind {
+    fn add_fields<'lua, F: mlua::UserDataFields<'lua, Self>>(fields: &mut F) {
+        fields.add_field_method_get("kind", |_, this| match this {
+            LightKind::Directional {..} => Ok("directional".to_string()),
+            LightKind::Point {..}       => Ok("point".to_string()),
+            LightKind::SpotLight {..}   => Ok("spotlight".to_string()),
+        });
+        // Point + SpotLight
+        fields.add_field_method_get("intensity", |_, this| match this {
+            LightKind::Point     { intensity, .. } => Ok(Some(intensity.clone())),
+            LightKind::SpotLight { intensity, .. } => Ok(Some(intensity.clone())),
+            _ => Ok(None),
+        });
+        fields.add_field_method_set("intensity", |_, this, new_intensity: f32| match this {
+            LightKind::Point { ref mut intensity, ..} => {
+                *intensity = new_intensity;
+                Ok(())
+            },
+            LightKind::SpotLight { ref mut intensity, ..} => {
+                *intensity = new_intensity;
+                Ok(())
+            },
+            _ => Err(LuaError::UserDataTypeMismatch),
+        });
+        fields.add_field_method_get("radius", |_, this| match this {
+            LightKind::Point     { radius, .. } => Ok(Some(radius.clone())),
+            LightKind::SpotLight { radius, .. } => Ok(Some(radius.clone())),
+            _ => Ok(None),
+        });
+        fields.add_field_method_set("radius", |_, this, new_radius: f32| match this {
+            LightKind::Point { ref mut radius, ..} => {
+                *radius = new_radius;
+                Ok(())
+            },
+            LightKind::SpotLight { ref mut radius, ..} => {
+                *radius = new_radius;
+                Ok(())
+            },
+            _ => Err(LuaError::UserDataTypeMismatch),
+        });
+        fields.add_field_method_get("range", |_, this| match this {
+            LightKind::Point     { range, .. } => Ok(Some(range.clone())),
+            LightKind::SpotLight { range, .. } => Ok(Some(range.clone())),
+            _ => Ok(None),
+        });
+        fields.add_field_method_set("range", |_, this, new_range: f32| match this {
+            LightKind::Point { ref mut range, ..} => {
+                *range = new_range;
+                Ok(())
+            },
+            LightKind::SpotLight { ref mut range, ..} => {
+                *range = new_range;
+                Ok(())
+            },
+            _ => Err(LuaError::UserDataTypeMismatch),
+        });
+        // Spotlight
+        fields.add_field_method_get("target", |_, this| match this {
+            LightKind::SpotLight { target, .. } => Ok(Some(LuaVec3(target.clone()))),
+            _ => Ok(None),
+        });
+        fields.add_field_method_set("target", |_, this, new_target: LuaVec3| match this {
+            LightKind::SpotLight { ref mut target, ..} => {
+                *target = new_target.0;
+                Ok(())
+            },
+            _ => Err(LuaError::UserDataTypeMismatch),
+        });
+    }
+
+    fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(format!("{:?}", this)));
+    }
+}
+impl LuaMod for LightKind {
+    fn mod_name() -> &'static str { "LightKind" }
+    fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
+        table.set("directional", lua.create_function(|_ctx, (illuminance, length)| {
+            Ok(LightKind::Directional { illuminance, length })
+        })?)?;
+        table.set("default_directional", lua.create_function(|_ctx, ()| {
+            Ok(LightKind::default_directional())
+        })?)?;
+        table.set("point", lua.create_function(|_ctx, (intensity, range, radius)| {
+            Ok(LightKind::Point { intensity, range, radius })
+        })?)?;
+        table.set("default_point", lua.create_function(|_ctx, ()| {
+            Ok(LightKind::default_point())
+        })?)?;
+        table.set("spotlight", lua.create_function(|_ctx, (target, intensity, range, radius, inner_angle, outer_angle)| {
+            let target: LuaVec3 = target;
+            Ok(LightKind::SpotLight { target: target.0, intensity, range, radius, inner_angle, outer_angle })
+        })?)?;
+        table.set("default_spotlight", lua.create_function(|_ctx, target: LuaVec3| {
+            Ok(LightKind::default_spotlight(target.0))
+        })?)?;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Component, Copy, Debug, Deserialize, Inspectable, PartialEq, Serialize)]
+pub enum LightAnim {
+    Constant { mul: f32 },
+    Sin { period: f32, amplitude: f32, #[serde(default)] phase_shift: f32 },
+}
+impl Default for LightAnim {
+    fn default() -> Self {
+        LightAnim::Constant { mul: 1. }
+    }
+}
+impl LuaUserData for LightAnim {
+    fn add_fields<'lua, F: mlua::UserDataFields<'lua, Self>>(fields: &mut F) {
+        fields.add_field_method_get("kind", |_, this| match this {
+            LightAnim::Constant {..} => Ok("constant".to_string()),
+            LightAnim::Sin {..} => Ok("sin".to_string()),
+        });
+    }
+
+    fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(format!("{:?}", this)));
+    }
+}
+impl LuaMod for LightAnim {
+    fn mod_name() -> &'static str { "LightAnim" }
+    fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
+        table.set("constant", lua.create_function(|_ctx, mul| {
+            Ok(LightAnim::Constant { mul })
+        })?)?;
+        table.set("sin", lua.create_function(|_ctx, (amplitude, period, phase_shift)| {
+            let phase_shift: Option<f32> = phase_shift;
+            Ok(LightAnim::Sin { amplitude, period, phase_shift: phase_shift.unwrap_or(0.) })
+        })?)?;
+        Ok(())
+    }
+}
+#[derive(Clone, Component, Copy, Debug, Deserialize, Inspectable, PartialEq, Serialize)]
+pub struct LightAnimState {
+    pub base_value: f32,
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Light {
@@ -228,21 +425,24 @@ pub struct Light {
     pub kind:  LightKind,
     #[serde(default = "default_color", deserialize_with = "deserialize_hex_color", serialize_with = "serialize_hex_color")]
     pub color: Color,
-    #[serde(default)]
+    #[serde(default = "default_shadows_enabled")]
     pub shadows_enabled: bool,
     #[serde(default = "default_shadow_depth_bias")]
     pub shadow_depth_bias: f32,
     #[serde(default = "default_shadow_normal_bias")]
     pub shadow_normal_bias: f32,
+    #[serde(default)]
+    pub anim: LightAnim,
 }
 fn default_color() -> Color { Color::WHITE }
+fn default_shadows_enabled() -> bool { true }
 pub fn default_shadow_depth_bias() -> f32 { 0.02 }
 pub fn default_shadow_normal_bias() -> f32 { 0.6 }
 impl Light {
-    pub fn spawn(&self, commands: &mut Commands, offset: Vec3) -> Entity {
+    pub fn insert_bundle(&self, commands: &mut EntityCommands, offset: Vec3) {
         match self.kind {
             LightKind::Point { intensity, range, radius } => {
-                commands.spawn().insert_bundle(PointLightBundle {
+                commands.insert_bundle(PointLightBundle {
                     point_light: PointLight {
                         intensity,
                         range,
@@ -254,10 +454,10 @@ impl Light {
                     },
                     transform: Transform::from_translation(offset + self.pos),
                     ..default()
-                }).id()
+                });
             },
             LightKind::SpotLight { target, intensity, range, radius, inner_angle, outer_angle } => {
-                commands.spawn().insert_bundle(SpotLightBundle {
+                commands.insert_bundle(SpotLightBundle {
                     spot_light: SpotLight {
                         intensity,
                         range,
@@ -271,10 +471,10 @@ impl Light {
                     },
                     transform: Transform::from_translation(offset + self.pos).looking_at(target, Vec3::Y),
                     ..default()
-                }).id()
+                });
             },
             LightKind::Directional { illuminance, length } => {
-                commands.spawn().insert_bundle(DirectionalLightBundle {
+                commands.insert_bundle(DirectionalLightBundle {
                     directional_light: DirectionalLight {
                         illuminance,
                         color: self.color,
@@ -293,8 +493,139 @@ impl Light {
                     },
                     transform: Transform::from_translation(offset + self.pos),
                     ..default()
-                }).id()
+                });
             },
         }
+        commands.insert(self.anim);
+        commands.insert(LightAnimState { base_value: self.kind.value() });
+    }
+
+    pub fn insert_bundle_mut(&self, entity: &mut EntityMut, offset: Vec3) {
+        match self.kind {
+            LightKind::Point { intensity, range, radius } => {
+                entity.insert_bundle(PointLightBundle {
+                    point_light: PointLight {
+                        intensity,
+                        range,
+                        radius,
+                        color: self.color,
+                        shadows_enabled: self.shadows_enabled,
+                        shadow_depth_bias: self.shadow_depth_bias,
+                        shadow_normal_bias: self.shadow_normal_bias,
+                    },
+                    transform: Transform::from_translation(offset + self.pos),
+                    ..default()
+                });
+            },
+            LightKind::SpotLight { target, intensity, range, radius, inner_angle, outer_angle } => {
+                entity.insert_bundle(SpotLightBundle {
+                    spot_light: SpotLight {
+                        intensity,
+                        range,
+                        radius,
+                        outer_angle,
+                        inner_angle,
+                        color: self.color,
+                        shadows_enabled: self.shadows_enabled,
+                        shadow_depth_bias: self.shadow_depth_bias,
+                        shadow_normal_bias: self.shadow_normal_bias,
+                    },
+                    transform: Transform::from_translation(offset + self.pos).looking_at(target, Vec3::Y),
+                    ..default()
+                });
+            },
+            LightKind::Directional { illuminance, length } => {
+                entity.insert_bundle(DirectionalLightBundle {
+                    directional_light: DirectionalLight {
+                        illuminance,
+                        color: self.color,
+                        shadows_enabled: self.shadows_enabled,
+                        shadow_depth_bias: self.shadow_depth_bias,
+                        shadow_normal_bias: self.shadow_normal_bias,
+                        shadow_projection: OrthographicProjection {
+                            left: -length,
+                            right: length,
+                            bottom: -length,
+                            top: length,
+                            near: -length,
+                            far: length,
+                            ..Default::default()
+                        },
+                    },
+                    transform: Transform::from_translation(offset + self.pos),
+                    ..default()
+                });
+            },
+        }
+        entity.insert(self.anim);
+        entity.insert(LightAnimState { base_value: self.kind.value() });
+    }
+}
+impl LuaUserData for Light {
+    fn add_fields<'lua, F: mlua::UserDataFields<'lua, Self>>(fields: &mut F) {
+        fields.add_field_method_get("anim", |_, this| Ok(this.anim.clone()));
+        fields.add_field_method_set("anim", |_, this, anim: LightAnim| {
+            this.anim = anim;
+            Ok(())
+        });
+        fields.add_field_method_get("color", |_, this| Ok(<Color as Into<RgbaColor>>::into(this.color.clone())));
+        fields.add_field_method_set("color", |_, this, color: RgbaColor| {
+            this.color = color.into();
+            Ok(())
+        });
+        fields.add_field_method_get("label", |_, this| Ok(this.label.clone()));
+        fields.add_field_method_set("label", |_, this, label: Option<String>| {
+            this.label = label;
+            Ok(())
+        });
+        fields.add_field_method_get("pos", |_, this| Ok(LuaVec3(this.pos.clone())));
+        fields.add_field_method_set("pos", |_, this, pos: LuaVec3| {
+            this.pos = pos.0;
+            Ok(())
+        });
+        fields.add_field_method_get("shadow_depth_bias", |_, this| Ok(this.shadow_depth_bias.clone()));
+        fields.add_field_method_set("shadow_depth_bias", |_, this, shadow_depth_bias: f32| {
+            this.shadow_depth_bias = shadow_depth_bias;
+            Ok(())
+        });
+        fields.add_field_method_get("shadows_enabled", |_, this| Ok(this.shadows_enabled.clone()));
+        fields.add_field_method_set("shadows_enabled", |_, this, shadows_enabled: bool| {
+            this.shadows_enabled = shadows_enabled;
+            Ok(())
+        });
+        fields.add_field_method_get("shadow_normal_bias", |_, this| Ok(this.shadow_normal_bias.clone()));
+        fields.add_field_method_set("shadow_normal_bias", |_, this, shadow_normal_bias: f32| {
+            this.shadow_normal_bias = shadow_normal_bias;
+            Ok(())
+        });
+    }
+
+    fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(format!("{:?}", this)));
+        methods.add_method("spawn", |ctx, this, ()| {
+            let world = ctx.globals().get::<_, LuaWorld>("world").unwrap();
+            let mut write = world.write();
+            let mut entity = write.spawn();
+            this.insert_bundle_mut(&mut entity, Vec3::ZERO);
+            Ok(LuaEntity::new(entity.id()))
+        });
+    }
+}
+impl LuaMod for Light {
+    fn mod_name() -> &'static str { "Light" }
+    fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
+        table.set("new", lua.create_function(|_ctx, kind: LightKind| {
+            Ok(Light {
+                label: None,
+                pos:   Vec3::ZERO,
+                kind,
+                color: Color::WHITE,
+                shadows_enabled: default_shadows_enabled(),
+                shadow_depth_bias: default_shadow_depth_bias(),
+                shadow_normal_bias: default_shadow_normal_bias(),
+                anim: LightAnim::default(),
+            })
+        })?)?;
+        Ok(())
     }
 }

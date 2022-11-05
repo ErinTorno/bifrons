@@ -4,6 +4,10 @@ use bevy::prelude::{info, ClearColor, Color};
 use bevy_mod_scripting::{prelude::*, lua::api::bevy::LuaWorld};
 use mlua::Lua;
 
+use crate::{util::IntoHex, scripting::init_luamod};
+
+use super::LuaMod;
+
 #[derive(Default)]
 pub struct ColorAPIProvider;
 
@@ -14,18 +18,19 @@ impl APIProvider for ColorAPIProvider {
 
     fn attach_api(&mut self, ctx: &mut Self::APITarget) -> Result<(), ScriptError> {
         let ctx = ctx.get_mut().unwrap();
-        attach_color_lua(ctx).map_err(ScriptError::new_other)?;
+        init_luamod::<RgbaColor>(ctx).map_err(ScriptError::new_other)?;
+
         info!("finished attaching ColorAPIProvider");
         Ok(())
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct RgbaColor {
-    r: f32,
-    g: f32,
-    b: f32,
-    a: f32,
+pub struct RgbaColor {
+    pub r: f32,
+    pub g: f32,
+    pub b: f32,
+    pub a: f32,
 }
 impl LuaUserData for RgbaColor {
     fn add_fields<'lua, F: mlua::UserDataFields<'lua, Self>>(fields: &mut F) {
@@ -38,8 +43,10 @@ impl LuaUserData for RgbaColor {
         fields.add_field_method_set("b", |_, this, b| { this.b = b; Ok(()) });
         fields.add_field_method_set("a", |_, this, a| { this.a = a; Ok(()) });
         fields.add_field_method_get("hue", |_, this| Ok(<RgbaColor as Into<Color>>::into(this.clone()).as_hsla_f32()[0]) );
-        fields.add_field_method_set("hue", |_, this, hue| {
+        fields.add_field_method_set("hue", |_, this, hue: f32| {
             let color: Color = this.clone().into();
+            let hue = hue % 360.;
+            let hue = if hue < 0. { hue + 360. } else { hue };
             if let Color::Hsla { hue: _, saturation, lightness, alpha } = color.as_hsla() {
                 *this = Color::hsla(hue, saturation, lightness, alpha).into();
             } else { unreachable!() }
@@ -64,7 +71,32 @@ impl LuaUserData for RgbaColor {
     }
 
     fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
-        methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(format!("{:?}", this)));
+        methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(<RgbaColor as Into<Color>>::into(this.clone()).into_hex()));
+    }
+}
+impl LuaMod for RgbaColor {
+    fn mod_name() -> &'static str { "Color" }
+    fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
+        table.set("hex", lua.create_function(|_, hex: String| {
+                let s = if hex.starts_with('#') { &hex[1..] } else { hex.as_str() };
+                Color::hex(s)
+                    .map_err(|h| mlua::Error::DeserializeError(h.to_string()))
+                    .map(RgbaColor::from)
+            })?
+        )?;
+        table.set("background", lua.create_function(|ctx, ()| {
+                Ok(ctx.globals().get::<_, LuaWorld>("world").unwrap().read()
+                    .get_resource::<ClearColor>().map(|c| Into::<RgbaColor>::into(c.0)))
+            })?
+        )?;
+        table.set("set_background", lua.create_function(|ctx, rgba: RgbaColor| {
+                let color = rgba.into();
+                ctx.globals().get::<_, LuaWorld>("world").unwrap().write()
+                    .insert_resource(ClearColor(color));
+                Ok(())
+            })?
+        )?;
+        Ok(())
     }
 }
 impl From<Color> for RgbaColor {
@@ -77,29 +109,4 @@ impl Into<Color> for RgbaColor {
     fn into(self) -> Color {
         Color::Rgba { red: self.r, green: self.g, blue: self.b, alpha: self.a }
     }
-}
-
-fn attach_color_lua(ctx: &mut Lua) -> Result<(), mlua::Error> {
-    let table = ctx.create_table()?;
-    table.set("hex", ctx.create_function(|_, hex: String| {
-            let s = if hex.starts_with('#') { &hex[1..] } else { hex.as_str() };
-            Color::hex(s)
-                .map_err(|h| mlua::Error::DeserializeError(h.to_string()))
-                .map(RgbaColor::from)
-        })?
-    )?;
-    table.set("background", ctx.create_function(|ctx, ()| {
-            Ok(ctx.globals().get::<_, LuaWorld>("world").unwrap().read()
-                .get_resource::<ClearColor>().map(|c| Into::<RgbaColor>::into(c.0)))
-        })?
-    )?;
-    table.set("set_background", ctx.create_function(|ctx, rgba: RgbaColor| {
-            let color = rgba.into();
-            ctx.globals().get::<_, LuaWorld>("world").unwrap().write()
-                .insert_resource(ClearColor(color));
-            Ok(())
-        })?
-    )?;
-    ctx.globals().set("Color", table)?;
-    Ok(())
 }

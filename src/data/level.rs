@@ -3,14 +3,31 @@ use std::collections::HashMap;
 use bevy::{prelude::*, utils::BoxedFuture, asset::*, reflect::TypeUuid};
 use serde::{Deserialize, Serialize};
 
-use super::{geometry::{Geometry, Light}, material::TextureMaterial};
+use super::{geometry::{Geometry, Light}, material::TextureMaterial, grid::CellID};
 use crate::util::serialize::*;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum PrefabLocation {
+    Free(Vec3),
+    Cell(CellID),
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct PrefabInstance {
+    pub asset: String,
+    pub at:    PrefabLocation,
+    #[serde(default = "default_room_child")]
+    pub room_child: bool,
+}
+fn default_room_child() -> bool { true }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Room {
     #[serde(default)]
     pub reveal_before_entry: bool,
     pub pos:      Vec3,
+    #[serde(default)]
+    pub prefabs: Vec<PrefabInstance>,
     #[serde(default)]
     pub geometry: Vec<Geometry>,
     #[serde(default)]
