@@ -1,0 +1,33 @@
+#![enable(implicit_some)]
+#![enable(unwrap_newtypes)]
+#![enable(unwrap_variant_newtypes)]
+(
+    tags: ["furniture", "wood"],
+    lines: {
+        "english": {
+            "name": "Painting",
+        },
+    },
+    attributes: (
+        pools: {
+            "health": (base: 2., current: 2.),
+        },
+    ),
+    animation: (
+        frames: {
+            "idle": [],
+        },
+        parts: {
+            "bkg": Sprite(layer: Background, shape: Quad(w: 1., h: 1.), material: "background"),
+            "out": Sprite(layer: Outline,    shape: Quad(w: 1., h: 1.), material: "painting"),
+        },
+        materials: {
+            "painting": (
+                layer:       Outline,
+                texture:     "props/furniture/paintings/painting_book_guy.png",
+                alpha_blend: true,
+                color:       "#5e292f",
+            ),
+        },
+    ),
+)

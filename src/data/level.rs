@@ -4,7 +4,7 @@ use bevy::{prelude::*, utils::BoxedFuture, asset::*, reflect::TypeUuid};
 use serde::{Deserialize, Serialize};
 
 use super::{geometry::{Geometry, Light}, material::TextureMaterial, grid::CellID};
-use crate::util::serialize::*;
+use crate::{util::serialize::*, scripting::LuaScriptVars};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum PrefabLocation {
@@ -14,10 +14,16 @@ pub enum PrefabLocation {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PrefabInstance {
+    #[serde(default)]
+    pub label: Option<String>,
     pub asset: String,
     pub at:    PrefabLocation,
+    #[serde(default)]
+    pub rotation: Vec3,
     #[serde(default = "default_room_child")]
     pub room_child: bool,
+    #[serde(default)]
+    pub script_vars: LuaScriptVars,
 }
 fn default_room_child() -> bool { true }
 
@@ -27,13 +33,15 @@ pub struct Room {
     pub reveal_before_entry: bool,
     pub pos:      Vec3,
     #[serde(default)]
+    pub keep_loaded: bool,
+    #[serde(default)]
     pub prefabs: Vec<PrefabInstance>,
     #[serde(default)]
     pub geometry: Vec<Geometry>,
     #[serde(default)]
     pub lights:   Vec<Light>,
     #[serde(default)]
-    pub keep_loaded: bool,
+    pub items:    Vec<PrefabInstance>,
 }
 
 #[derive(Clone, Component, Debug, Default, Deserialize, Serialize)]

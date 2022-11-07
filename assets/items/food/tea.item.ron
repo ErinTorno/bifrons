@@ -1,0 +1,28 @@
+#![enable(implicit_some)]
+#![enable(unwrap_newtypes)]
+#![enable(unwrap_variant_newtypes)]
+Item(
+    scripts: ["items/lantern.lua"],
+    lines: {
+        "name": "Tea",
+        "name#bl": "Black tea",
+        "name#bs": "Blackberry sage tea",
+        "name#ch": "Chai tea",
+        "name#da": "Dandelion tea",
+        "name#eg": "Earl Grey tea",
+        "name#eg": "Expresso black tea",
+        "name#gr": "Green tea",
+        "name#lp": "Lemon pine tea",
+        "name#ma": "Macha tea",
+        "name#mn": "Mint green tea",
+        "name#mp": "Maple black tea",
+        "name#oo": "Oolong tea",
+        "name#pc": "Peach ginger black tea",
+        "name#pw": "Pomegranite white tea",
+        "name#ro": "Rooibos tea",
+        "name#sw": "Sakura white tea",
+    },
+    tags: ["lightsource", "weapon"],
+    equip_slots: ["hand_left", "hand_right"],
+    // animate NoChange color
+)

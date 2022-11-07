@@ -1,19 +1,22 @@
 use bevy::{asset::*, prelude::*, reflect::TypeUuid, utils::HashSet};
 use serde::{Deserialize, Serialize};
 
-use super::anim::Animation;
+use crate::scripting::LuaScriptVars;
+
+use super::{anim::Animation, lang::Lines};
 
 #[derive(Clone, Debug, Deserialize, Serialize, TypeUuid)]
 #[uuid = "68fbd47c-252c-409d-94f0-f581051ca8a5"]
 pub struct Prefab {
     #[serde(default)]
+    pub scripts:   Vec<String>,
+    #[serde(default)]
+    pub script_vars: LuaScriptVars,
+    #[serde(default)]
     pub tags:      HashSet<String>,
+    #[serde(default)]
+    pub lines:     Lines,
     pub animation: Animation,
-}
-
-#[derive(Clone, Component, Debug, Default)]
-pub struct ToSpawnPrefab {
-    pub handle: Handle<Prefab>,
 }
 
 #[derive(Default)]

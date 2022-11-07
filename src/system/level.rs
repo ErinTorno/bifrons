@@ -4,9 +4,9 @@ use bevy::{prelude::*};
 use bevy_mod_scripting::{prelude::*};
 use iyes_loopless::prelude::IntoConditionalSystem;
 
-use crate::data::{level::*, material::{TextureMaterial, AtlasIndex}, geometry::Shape, prefab::ToSpawnPrefab};
+use crate::data::{level::*, material::{TextureMaterial, AtlasIndex, TexMatInfo}, geometry::Shape, prefab::{PrefabLoader, Prefab}, item::{ItemLoader, Item}};
 
-use super::texture::{MissingTexture, Background, ImageDescriptions};
+use super::{texture::{MissingTexture, Background}, common::{fix_missing_extension, ToInitHandle}};
 
 #[derive(Clone, Debug, Default)]
 pub struct LevelPlugin;
@@ -63,7 +63,7 @@ pub fn reset_loaded_level(
     missing_tex:      Res<MissingTexture>,
     background:       Res<Background>,
     mut ccolor:       ResMut<ClearColor>,
-    mut descriptions: ResMut<ImageDescriptions>,
+    mut tex_mat_info: ResMut<TexMatInfo>,
     asset_server:     Res<AssetServer>,
     mut meshes:       ResMut<Assets<Mesh>>,
     mut materials:    ResMut<Assets<StandardMaterial>>,
@@ -80,11 +80,12 @@ pub fn reset_loaded_level(
         let background_texmat = TextureMaterial::BACKGROUND;
         let missing_texmat    = TextureMaterial::MISSING;
         let lvl_mats: HashMap<&String, Handle<StandardMaterial>> = level.materials.iter()
-            .map(|(name, mat)| (name, materials.add(mat.make_material(&asset_server, descriptions.as_mut()))))
+            .map(|(name, mat)| (name, mat.load_material(&asset_server, tex_mat_info.as_mut(), materials.as_mut())))
             .collect();
         
         for (room_name, room) in level.rooms.iter() {
             commands.spawn().insert_bundle(VisibilityBundle::default())
+                .insert(Name::from(room_name.clone()))
                 .insert_bundle(TransformBundle {
                     local: Transform::from_translation(room.pos),
                     ..TransformBundle::default()
@@ -101,7 +102,9 @@ pub fn reset_loaded_level(
                                     Quat::from_rotation_z(geometry.rotation.z)
                                 ),
                                 ..TransformBundle::default()
-                            }).add_children(|parent| {
+                            })
+                            .insert(Name::new(geometry.label.as_ref().cloned().unwrap_or("unnamed geometry".to_string())))
+                            .add_children(|parent| {
                                 for texname in geometry.materials.iter() {
                                     let (material, texmat) = if texname == "background" {
                                         (background.material.clone(), &background_texmat)
@@ -135,16 +138,38 @@ pub fn reset_loaded_level(
 
                     for prefab in room.prefabs.iter() {
                         if prefab.room_child {
+                            let path = fix_missing_extension::<PrefabLoader>(prefab.asset.clone());
                             parent.spawn()
                                 .insert_bundle(TransformBundle {
                                     local: Transform::from_translation(match prefab.at {
                                         PrefabLocation::Free(v) => v,
                                         _ => { unimplemented!() },
-                                    }),
+                                    }).with_rotation(Quat::from_euler(EulerRot::XYZ, prefab.rotation.x, prefab.rotation.y, prefab.rotation.z)),
                                     ..default()
                                 })
                                 .insert_bundle(VisibilityBundle::default())
-                                .insert(ToSpawnPrefab { handle: asset_server.load(&prefab.asset) });
+                                .insert(ToInitHandle::<Prefab>::new(asset_server.load(&path)))
+                                .insert(prefab.script_vars.clone())
+                                .insert(Name::new(prefab.label.as_ref().cloned().unwrap_or("unnamed prefab".to_string())));
+                        } else {
+                            todo!();
+                        }
+                    }
+                    for item in room.items.iter() {
+                        if item.room_child {
+                            let path = fix_missing_extension::<ItemLoader>(item.asset.clone());
+                            parent.spawn()
+                                .insert_bundle(TransformBundle {
+                                    local: Transform::from_translation(match item.at {
+                                        PrefabLocation::Free(v) => v,
+                                        _ => { unimplemented!() },
+                                    }).with_rotation(Quat::from_euler(EulerRot::XYZ, item.rotation.x, item.rotation.y, item.rotation.z)),
+                                    ..default()
+                                })
+                                .insert_bundle(VisibilityBundle::default())
+                                .insert(ToInitHandle::<Item>::new(asset_server.load(&path)))
+                                .insert(item.script_vars.clone())
+                                .insert(Name::new(item.label.as_ref().cloned().unwrap_or("unnamed item".to_string())));
                         } else {
                             todo!();
                         }
@@ -154,6 +179,7 @@ pub fn reset_loaded_level(
         
         commands.entity(st.level_entity)
             .remove::<ScriptCollection::<LuaFile>>()
+            .insert(Name::from(level.name.clone()))
             .insert(ScriptCollection::<LuaFile> {
                 scripts: level.scripts.iter().map(|path| {
                     let handle = asset_server.load::<LuaFile, _>(path);

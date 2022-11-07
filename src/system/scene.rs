@@ -27,9 +27,6 @@ fn init_scene(
                 is_init = true;
                 if let Some(handle) = overrides.mat_overrides.get(name.as_str()) {
                     commands.entity(entity).insert(handle.clone());
-
-                } else {
-                    info!("No override for {:?}", name);
                 }
             }
         });

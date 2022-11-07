@@ -3,6 +3,7 @@ pub mod anim;
 pub mod camera;
 pub mod common;
 pub mod editor;
+pub mod item;
 pub mod level;
 pub mod prefab;
 pub mod scene;

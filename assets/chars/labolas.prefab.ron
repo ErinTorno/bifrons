@@ -1,8 +1,11 @@
 #![enable(implicit_some)]
+#![enable(unwrap_newtypes)]
 #![enable(unwrap_variant_newtypes)]
 (
     lines: {
-        "name": "Labolas",
+        "english": {
+            "name": "Labolas",
+        },
     },
     animation: (
         attachments: {
@@ -30,6 +33,7 @@
                 layer:            Outline,
                 color:            "#f64560",
                 texture:          "chars/placeholder/labolas.png",
+                alpha_blend:      true,
                 // emissive_texture: "chars/placeholder/labolas.png",
                 // emissive_color:   "#3b2e0d",
                 atlas:            (rows: 2, columns: 6, width: 204, height: 344),

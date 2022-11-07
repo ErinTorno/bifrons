@@ -1,8 +1,11 @@
 #![enable(implicit_some)]
+#![enable(unwrap_newtypes)]
 #![enable(unwrap_variant_newtypes)]
 Level(
     name:    "Testing House",
     scripts: ["levels/testing/testing_house.lua"],
+    lines: {
+    },
     player_spawn: [
         (room: "foyer", grid: "main", pos: (5, 5)),
     ],
@@ -22,8 +25,8 @@ Level(
             layer: Outline,
             color: "#9cabb1",
             texture:          "tiles/window.png",
-            emissive_texture: "tiles/window.png",
-            emissive_color:   "#111f25",
+            // emissive_texture: "tiles/window.png",
+            // emissive_color:   "#111f25",
             mode: Repeat(step: 2.),
             reflectance: 0.9,
         ),
@@ -48,9 +51,19 @@ Level(
                 "main": (shape: Rect(w: 7, h: 11)),
             },
             prefabs: [
+                (asset: "props/furniture/end_table",          at: Free(-2.9, 0., 2.)), // can drop .prefab.ron extension here, since it already knows it'll need that
+                (asset: "props/furniture/paintings/painting", at: Free(-2.3, 1., -5.8), rotation: (0., 0., 0.3926))
+            ],
+            items: [
                 (
-                    asset: "props/furniture/end_table.prefab.ron",
-                    at:    Free(-2.9, 0., 2.),
+                    label: "foyer_lantern",
+                    asset: "items/lantern", // can drop .item.ron extension here, since it already knows it'll need that
+                    at: Free(-3, 0.34, 1.9),
+                    rotation: (0., 1.0471, 0.),
+                    script_vars: {
+                        // "lantern_color":    Color("#6cd47f"),
+                        // "lantern_emissive": Color("#63602e"),
+                    },
                 ),
             ],
             geometry: [
@@ -74,29 +87,24 @@ Level(
                     rotation:  (0., 1.57079632679, 0.),
                     materials: ["window"],
                 ),
-                (
-                    label:     "floor",
-                    pos:       (0., 5., 0.),
-                    shape:     Quad(w: 1., h: 11.),
-                    rotation:  (-1.57079632679, 0., 0.),
-                    materials: ["background", "floor"],
-                ),
             ],
             lights: [
-                (
-                    pos: (0.19, 4., -2.5),
-                    color: "#f3d79b",
-                    shadows_enabled: true,
-                    kind: Point(intensity: 6000.),
-                    anim: Sin(period: 1.25, amplitude: 0.12),
-                ),
-                (
-                    pos: (0.17, 4., 2.5),
-                    color: "#ffd293",
-                    shadows_enabled: true,
-                    kind: Point(intensity: 6000.),
-                    anim: Sin(period: 1.25, amplitude: 0.2, phase_shift: 0.785398163397),
-                ),
+                // (
+                //     label: "foyer_lights",
+                //     pos: (0.19, 4., -2.5),
+                //     color: "#f3d79b",
+                //     shadows_enabled: true,
+                //     kind: Point(intensity: 6000.),
+                //     anim: Sin(period: 1.25, amplitude: 0.12),
+                // ),
+                // (
+                //     label: "foyer_lights",
+                //     pos: (0.17, 4., 2.5),
+                //     color: "#ffd293",
+                //     shadows_enabled: true,
+                //     kind: Point(intensity: 6000.),
+                //     anim: Sin(period: 1.25, amplitude: 0.2, phase_shift: 0.785398163397),
+                // ),
             ]
         ),
     },

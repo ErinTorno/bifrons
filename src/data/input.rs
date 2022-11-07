@@ -5,19 +5,19 @@ use bevy_inspector_egui::Inspectable;
 use serde::*;
 
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Reflect, Serialize)]
 pub enum JoystickSide {
     Left,
     Right,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Reflect, Serialize)]
 pub enum ScrollWheel {
     Up,
     Down,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Reflect, Serialize)]
 pub enum InputCode {
     Key      (KeyCode),
     Mouse    (MouseButton),
@@ -27,7 +27,7 @@ pub enum InputCode {
     Joystick { side: JoystickSide, angle: f32, sensitivity: f32 },
 }
 
-#[derive(Clone, Debug, Inspectable, PartialEq)]
+#[derive(Clone, Debug, Inspectable, PartialEq, Reflect)]
 pub enum InputData {
     Binary      { pressed: bool },
     Analog      { state: f32, },
@@ -59,7 +59,7 @@ impl Default for InputData {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Inspectable, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Inspectable, PartialEq, Reflect)]
 pub enum InputTime {
     #[default]
     NotPressed,
@@ -126,7 +126,7 @@ impl InputTime {
     }
 }
 
-#[derive(Clone, Debug, Default, Inspectable, PartialEq)]
+#[derive(Clone, Debug, Default, Inspectable, PartialEq, Reflect)]
 pub struct InputTS {
     pub data: InputData,
     pub time: InputTime,
@@ -162,7 +162,7 @@ impl InputTS {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Inspectable, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Inspectable, PartialEq, Reflect)]
 pub enum CameraType {
     #[default]
     Following, // follows the player

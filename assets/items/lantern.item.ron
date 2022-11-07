@@ -1,12 +1,48 @@
 #![enable(implicit_some)]
+#![enable(unwrap_newtypes)]
+#![enable(unwrap_variant_newtypes)]
 Item(
     scripts: ["items/lantern.lua"],
-    // script_vars: r##"
-    //     Vars.lantern_color = Color.hex("#e09b4d")
-    // "##,
     lines: {
-        "name": "Lantern",
+        "english": {
+            "name": "Lantern",
+        },
     },
-    tags: ["lightsource", "weapon"],
+    tags: ["fire", "lightsource", "metal", "weapon"],
     equip_slots: ["hand_left", "hand_right"],
+    animation: (
+        frames: {
+            "idle": [],
+        },
+        parts: {
+            "fire": Sprite(layer: Outline,    shape: Quad(w: 0.308, h: 0.52), material: "fire", atlas_offset: (row: 0, col: 2)),
+            "bkg":  Sprite(layer: Background, shape: Quad(w: 0.308, h: 0.52), material: "bkg",  atlas_offset: (row: 0, col: 1)),
+            "out":  Sprite(layer: Outline,    shape: Quad(w: 0.308, h: 0.52), material: "out"),
+        },
+        materials: {
+            "out": (
+                layer:            Outline,
+                color:            "#4b4158",
+                texture:          "items/shutter_lantern.png",
+                emissive_texture: "items/shutter_lantern.png",
+                alpha_blend:      true,
+                atlas:            (rows: 1, columns: 3, width: 314, height: 512),
+            ),
+            "bkg": (
+                layer:            Background,
+                texture:          "items/shutter_lantern.png",
+                atlas:            (rows: 1, columns: 3, width: 314, height: 512),
+                alpha_blend:      true,
+            ),
+            "fire": (
+                layer:            Outline,
+                color:            "#e09b40",
+                texture:          "items/shutter_lantern.png",
+                emissive_texture: "items/shutter_lantern.png",
+                atlas:            (rows: 1, columns: 3, width: 314, height: 512),
+                alpha_blend:      true,
+                unlit:            true,
+            ),
+        },
+    ),
 )

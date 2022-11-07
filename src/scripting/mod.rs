@@ -1,13 +1,16 @@
-use std::sync::Mutex;
+use std::{sync::Mutex, collections::HashMap};
 use ::std::time::Duration;
 
 use bevy::{prelude::*};
-use bevy_mod_scripting::{prelude::*, core::{event::ScriptLoaded}, lua::api::bevy::{LuaBevyAPIProvider},};
+use bevy_inspector_egui::{Inspectable, RegisterInspectable};
+use bevy_mod_scripting::{prelude::*, core::{event::ScriptLoaded}, lua::api::bevy::{LuaBevyAPIProvider, LuaEntity, LuaWorld},};
 use iyes_loopless::prelude::FixedTimestepStage;
+use serde::{Deserialize, Serialize};
 
-use crate::data::stat::{Stat, Pool};
+use crate::data::{stat::{Stat, Pool}, material::TextureMaterial};
+use crate::util::serialize::*;
 
-use self::event::{ON_UPDATE, ON_INIT};
+use self::{event::{ON_UPDATE, ON_INIT}, color::RgbaColor};
 
 pub mod color;
 pub mod entity;
@@ -15,6 +18,7 @@ pub mod event;
 pub mod geometry;
 pub mod level;
 pub mod log;
+pub mod random;
 pub mod time;
 
 #[derive(Clone, Debug, Default)]
@@ -26,6 +30,9 @@ impl Plugin for ScriptPlugin {
         on_update.add_system(send_on_update);
 
         app
+            .register_inspectable::<ScriptVar>()
+            .register_type::<ScriptVar>()
+            .register_inspectable::<LuaScriptVars>()
             .add_stage_before(
                 CoreStage::Update,
                 "on_update",
@@ -40,6 +47,7 @@ impl Plugin for ScriptPlugin {
             .add_api_provider::<LuaScriptHost<()>>(Box::new(geometry::GeometryAPIProvider))
             .add_api_provider::<LuaScriptHost<()>>(Box::new(level::LevelAPIProvider))
             .add_api_provider::<LuaScriptHost<()>>(Box::new(log::LogAPIProvider))
+            .add_api_provider::<LuaScriptHost<()>>(Box::new(random::RandomAPIProvider))
             .add_api_provider::<LuaScriptHost<()>>(Box::new(time::TimeAPIProvider))
             .add_system(send_on_init)
             ;
@@ -92,6 +100,8 @@ impl APIProvider for PreludeAPIProvider {
     fn attach_api(&mut self, ctx: &mut Self::APITarget) -> Result<(), ScriptError> {
         let ctx = ctx.get_mut().unwrap();
         attach_prelude_lua(ctx).map_err(ScriptError::new_other)?;
+        init_luamod::<ScriptVar>(ctx).map_err(ScriptError::new_other)?;
+        init_luamod::<TextureMaterial>(ctx).map_err(ScriptError::new_other)?;
         init_luamod::<Pool>(ctx).map_err(ScriptError::new_other)?;
         init_luamod::<Stat>(ctx).map_err(ScriptError::new_other)?;
         Ok(())
@@ -175,4 +185,49 @@ pub fn format_lua(values: LuaMultiValue) -> Result<String, LuaError> {
         }
     }
     Ok(s)
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Inspectable, PartialEq, Reflect, Serialize)]
+pub enum ScriptVar {
+    Bool(bool),
+    Color(#[serde(deserialize_with = "deserialize_hex_color", serialize_with = "serialize_hex_color")] Color),
+    Int(i64),
+    #[default]
+    Nil,
+    Num(f64),
+    String(String),
+}
+impl<'lua> ToLua<'lua> for ScriptVar {
+    fn to_lua(self, lua: &'lua Lua) -> Result<LuaValue<'lua>, LuaError> {
+        match self {
+            ScriptVar::Bool(b) => Ok(LuaValue::Boolean(b)),
+            ScriptVar::Color(c) => Ok(RgbaColor::from(c).to_lua(lua)?),
+            ScriptVar::Int(i) => Ok(LuaValue::Integer(i)),
+            ScriptVar::Nil         => Ok(LuaValue::Nil),
+            ScriptVar::Num(i) => Ok(LuaValue::Number(i)),
+            ScriptVar::String(s) => Ok(s.to_lua(lua)?),
+        }
+    }
+}
+impl LuaMod for ScriptVar {
+    fn mod_name() -> &'static str { "Var" }
+    fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
+        table.set("all", lua.create_function(|ctx, entity: LuaEntity| {
+            let world = ctx.globals().get::<_, LuaWorld>("world").unwrap();
+            let w = world.read();
+            if let Some(vars) = w.get::<LuaScriptVars>(entity.inner()?) {
+                Ok(Some(vars.0.clone().to_lua(ctx)?))
+            } else { Ok(None) }
+        })?)?;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Component, Debug, Default, Deserialize, Inspectable, PartialEq, Serialize)]
+pub struct LuaScriptVars(pub HashMap<String, ScriptVar>);
+
+impl LuaScriptVars {
+    pub fn merge(&mut self, other: &Self) {
+        self.0.extend(other.0.iter().map(|p| (p.0.clone(), p.1.clone())));
+    }
 }

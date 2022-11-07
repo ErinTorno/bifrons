@@ -10,7 +10,7 @@ use bevy_inspector_egui::{WorldInspectorPlugin};
 use bevy_kira_audio::prelude::*;
 use bevy::prelude::*;
 use bevy_mod_scripting::prelude::*;
-use data::{prefab::{Prefab, PrefabLoader}, level::{Level, LevelLoader}};
+use data::{prefab::{Prefab, PrefabLoader}, level::{Level, LevelLoader}, item::{ItemLoader, Item}};
 
 mod data;
 mod scripting;
@@ -27,14 +27,17 @@ fn main() {
         .add_plugin(system::action::ActionPlugin)
         .add_plugin(system::anim::AnimPlugin)
         .add_plugin(system::camera::CameraPlugin)
+        .add_plugin(system::item::ItemPlugin)
         .add_plugin(system::level::LevelPlugin)
         .add_plugin(system::prefab::PrefabPlugin)
         .add_plugin(system::scene::ScenePlugin)
         .add_plugin(system::texture::TexturePlugin)
         .insert_resource(FileAssetIo::new(Path::new("./assets"), false))
         .add_script_host::<LuaScriptHost<()>,_>(CoreStage::PostUpdate)
+        .add_asset::<Item>()
         .add_asset::<Prefab>()
         .add_asset::<Level>()
+        .init_asset_loader::<ItemLoader>()
         .init_asset_loader::<PrefabLoader>()
         .init_asset_loader::<LevelLoader>()
         .run();

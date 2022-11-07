@@ -2,8 +2,9 @@ use std::f32::consts::PI;
 
 use bevy::{prelude::*};
 use bevy_inspector_egui::RegisterInspectable;
+use bevy_mod_scripting::lua::api::RegisterForeignLuaType;
 
-use crate::data::geometry::{LightAnim, LightAnimState};
+use crate::data::geometry::{LightAnim, LightAnimState, Light};
 
 #[derive(Clone, Debug, Default)]
 pub struct AnimPlugin;
@@ -13,6 +14,9 @@ impl Plugin for AnimPlugin {
         app
             .register_inspectable::<LightAnim>()
             .register_inspectable::<LightAnimState>()
+            .register_type::<Light>()
+            .register_type::<LightAnim>()
+            .register_type::<LightAnimState>()
             .add_system(anim_lights)
         ;
     }

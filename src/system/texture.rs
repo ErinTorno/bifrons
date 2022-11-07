@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use bevy::{prelude::*, render::{texture::ImageSampler, render_resource::{SamplerDescriptor, FilterMode, Extent3d, TextureDimension, TextureFormat}}, asset::LoadState};
 use bevy_inspector_egui::{Inspectable, RegisterInspectable};
 
-use crate::data::anim::ColorLayer;
+use crate::data::{anim::ColorLayer, material::TexMatInfo};
 
 #[derive(Clone, Debug, Default)]
 pub struct TexturePlugin;
@@ -14,9 +14,9 @@ impl Plugin for TexturePlugin {
         app
             .init_resource::<MaterialColors>()
             .init_resource::<Background>()
-            .init_resource::<ImageDescriptions>()
             .init_resource::<ImagesToCheck>()
             .init_resource::<MissingTexture>()
+            .init_resource::<TexMatInfo>()
             .add_startup_system(setup_default_textures)
             .add_system(update_image_descriptor)
             .add_system(update_material_colors)
@@ -56,11 +56,6 @@ pub fn update_material_colors(
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct ImageDescriptions {
-    pub map: HashMap<Handle<Image>, ImageSampler>,
-}
-
-#[derive(Clone, Debug, Default)]
 pub struct ImagesToCheck {
     pub vec: Vec<Handle<Image>>,
 }
@@ -90,7 +85,7 @@ pub fn log_asset_errors(
 }
 
 pub fn update_image_descriptor(
-    desc: Res<ImageDescriptions>,
+    tex_mat_info: Res<TexMatInfo>,
     mut to_check: ResMut<ImagesToCheck>,
     mut images: ResMut<Assets<Image>>,
     mut events: EventReader<AssetEvent<Image>>,
@@ -100,7 +95,7 @@ pub fn update_image_descriptor(
         match e {
             AssetEvent::Created { handle } => {
                 if let Some(image) = images.get_mut(handle) {
-                    if let Some(sampler) = desc.map.get(handle) {
+                    if let Some(sampler) = tex_mat_info.samplers.get(handle) {
                         image.sampler_descriptor = sampler.clone();
                     } else {
                         image.sampler_descriptor = default_sampler.clone();
@@ -110,7 +105,7 @@ pub fn update_image_descriptor(
             },
             AssetEvent::Modified { handle } => {
                 if let Some(image) = images.get_mut(handle) {
-                    if let Some(sampler) = desc.map.get(handle) {
+                    if let Some(sampler) = tex_mat_info.samplers.get(handle) {
                         image.sampler_descriptor = sampler.clone();
                     } else {
                         image.sampler_descriptor = default_sampler.clone();
@@ -150,10 +145,7 @@ pub fn setup_default_textures(
 
     const TEXTURE_SIZE: usize = 8;
 
-    let mut palette: [u8; 32] = [
-        255, 102, 159, 255, 255, 159, 102, 255, 236, 255, 102, 255, 121, 255, 102, 255, 102, 255,
-        198, 255, 102, 198, 255, 255, 121, 102, 255, 255, 236, 102, 255, 255,
-    ];
+    let mut palette: [u8; 32] = [255, 102, 159, 255, 255, 159, 102, 255, 236, 255, 102, 255, 121, 255, 102, 255, 102, 255, 198, 255, 102, 198, 255, 255, 121, 102, 255, 255, 236, 102, 255, 255];
 
     let mut texture_data = [0; TEXTURE_SIZE * TEXTURE_SIZE * 4];
     for y in 0..TEXTURE_SIZE {
@@ -175,6 +167,8 @@ pub fn setup_default_textures(
     if let ImageSampler::Descriptor(desc) =  &mut image.sampler_descriptor {
         desc.min_filter = FilterMode::Nearest;
         desc.mag_filter = FilterMode::Nearest;
+    } else {
+        warn!("Could not take missing_tex Image sampler_descriptor");
     }
     missing_tex.image = images.add(image);
     missing_tex.material = materials.add(StandardMaterial {

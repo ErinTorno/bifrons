@@ -96,6 +96,8 @@ impl LuaMod for RgbaColor {
                 Ok(())
             })?
         )?;
+        table.set("black", RgbaColor::from(Color::BLACK))?;
+        table.set("white", RgbaColor::from(Color::WHITE))?;
         Ok(())
     }
 }

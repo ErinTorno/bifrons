@@ -1,7 +1,13 @@
 #![enable(implicit_some)]
+#![enable(unwrap_newtypes)]
 #![enable(unwrap_variant_newtypes)]
 (
     tags: ["furniture", "wood"],
+    lines: {
+        "english": {
+            "name": "End table",
+        },
+    },
     // scripts: ["props/damageable.lua"],
     attributes: (
         pools: {
@@ -16,7 +22,7 @@
             "idle": [],
         },
         parts: {
-            "table": Scene(asset: "props/furniture/end_table.gltf#Scene0", mat_overrides: {
+            "table": Scene(asset: "props/furniture/end_table.gltf#Scene0", scale: (0.75, 0.75, 0.75), mat_overrides: {
                 "table":     "normal",
                 "table_bkg": "background",
             }),
