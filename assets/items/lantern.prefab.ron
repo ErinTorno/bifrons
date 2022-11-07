@@ -1,7 +1,7 @@
 #![enable(implicit_some)]
 #![enable(unwrap_newtypes)]
 #![enable(unwrap_variant_newtypes)]
-Item(
+Prefab(
     scripts: ["items/lantern.lua"],
     lines: {
         "english": {
@@ -9,7 +9,9 @@ Item(
         },
     },
     tags: ["fire", "lightsource", "metal", "weapon"],
-    equip_slots: ["hand_left", "hand_right"],
+    item: (
+        equip_slots: ["hand_left", "hand_right"],
+    ),
     animation: (
         frames: {
             "idle": [],

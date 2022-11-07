@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use bevy::{prelude::*, render::{texture::ImageSampler, render_resource::{SamplerDescriptor, FilterMode, Extent3d, TextureDimension, TextureFormat}}, asset::LoadState};
 use bevy_inspector_egui::{Inspectable, RegisterInspectable};
 
-use crate::data::{anim::ColorLayer, material::TexMatInfo};
+use crate::data::{anim::ColorLayer, material::{TexMatInfo, LoadedMaterials}};
 
 #[derive(Clone, Debug, Default)]
 pub struct TexturePlugin;
@@ -12,6 +12,7 @@ pub struct TexturePlugin;
 impl Plugin for TexturePlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         app
+            .register_inspectable::<LoadedMaterials>()
             .init_resource::<MaterialColors>()
             .init_resource::<Background>()
             .init_resource::<ImagesToCheck>()

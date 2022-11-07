@@ -8,14 +8,17 @@
             "name": "End table",
         },
     },
-    // scripts: ["props/damageable.lua"],
+    scripts: ["props/damageable.lua"],
+    script_vars: {
+        "damage_frames": Array([
+            Str("props/furniture/end_table_damaged.png"),
+            Str("props/furniture/end_table.png"),
+        ]),
+        "damage_mat": Str("outline"),
+    },
     attributes: (
-        pools: {
-            "health": (base: 6., current: 6.),
-        },
-        stats: {
-            "hardness": (base: 2),
-        },
+        pools: { "health":   (base: 6., current: 2.) },
+        stats: { "hardness": (base: 2.) },
     ),
     animation: (
         frames: {
@@ -23,20 +26,14 @@
         },
         parts: {
             "table": Scene(asset: "props/furniture/end_table.gltf#Scene0", scale: (0.75, 0.75, 0.75), mat_overrides: {
-                "table":     "normal",
+                "table":     "outline",
                 "table_bkg": "background",
             }),
         },
         materials: {
-            "normal": (
+            "outline": (
                 layer:       Outline,
                 texture:     "props/furniture/end_table.png", // equiv to "props/furniture/end_table.gltf#Texture0"
-                alpha_blend: true,
-                color:       "#7a6260",
-            ),
-            "damaged": (
-                layer:       Outline,
-                texture:     "props/furniture/end_table_damaged.png",
                 alpha_blend: true,
                 color:       "#7a6260",
             ),

@@ -168,7 +168,7 @@ impl Animation {
     
                         for (name, mat_name) in part.mat_overrides.iter() {
                             let (material, _) = self.get_tex(mat_name, asset_server, tex_mat_info, background, materials);
-                            by_name.insert(name.clone(), material.clone());
+                            by_name.insert(mat_name.clone(), material.clone());
                             mat_overrides.insert(name.clone(), material);
                         }
     

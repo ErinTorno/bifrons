@@ -2,6 +2,7 @@
 #![enable(unwrap_newtypes)]
 #![enable(unwrap_variant_newtypes)]
 (
+    scripts: ["props/furniture/painting.lua"],
     tags: ["furniture", "wood"],
     lines: {
         "english": {
@@ -24,7 +25,7 @@
         materials: {
             "painting": (
                 layer:       Outline,
-                texture:     "props/furniture/paintings/painting_book_guy.png",
+                texture:     "props/furniture/paintings/blank.png",
                 alpha_blend: true,
                 color:       "#5e292f",
             ),

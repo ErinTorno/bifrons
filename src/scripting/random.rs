@@ -1,6 +1,7 @@
 use ::std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use bevy::prelude::*;
 use bevy_mod_scripting::{prelude::*};
 use mlua::Lua;
 use rand::prelude::*;
@@ -27,6 +28,10 @@ fn with_rng<F, R>(f: F) -> Result<R, LuaError> where F: Fn(&mut ChaCha8Rng) -> R
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
     let _ = NEXT_SEED.compare_exchange(seed, rng.next_u64(), Ordering::AcqRel, Ordering::Relaxed);
     Ok(f(&mut rng))
+}
+pub fn set_seed(next_seed: u64) {
+    let seed = NEXT_SEED.load(Ordering::Relaxed);
+    let _ = NEXT_SEED.compare_exchange(seed, next_seed, Ordering::AcqRel, Ordering::Relaxed);
 }
 
 fn attach_random_lua(ctx: &mut Lua) -> Result<(), mlua::Error> {

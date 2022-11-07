@@ -4,7 +4,7 @@ use bevy::{prelude::*};
 use bevy_mod_scripting::{prelude::*};
 use iyes_loopless::prelude::IntoConditionalSystem;
 
-use crate::data::{level::*, material::{TextureMaterial, AtlasIndex, TexMatInfo}, geometry::Shape, prefab::{PrefabLoader, Prefab}, item::{ItemLoader, Item}};
+use crate::{data::{level::*, material::{TextureMaterial, AtlasIndex, TexMatInfo}, geometry::Shape, prefab::{PrefabLoader, Prefab}}, scripting::random};
 
 use super::{texture::{MissingTexture, Background}, common::{fix_missing_extension, ToInitHandle}};
 
@@ -70,7 +70,7 @@ pub fn reset_loaded_level(
 ) {
     if st.should_reset {
         let level = &st.level;
-
+        random::set_seed(rand::prelude::random()); // todo should this be lobby setting?
         ccolor.0 = level.background;
         {
             let mut mat = materials.get_mut(&background.material).unwrap();
@@ -151,25 +151,6 @@ pub fn reset_loaded_level(
                                 .insert(ToInitHandle::<Prefab>::new(asset_server.load(&path)))
                                 .insert(prefab.script_vars.clone())
                                 .insert(Name::new(prefab.label.as_ref().cloned().unwrap_or("unnamed prefab".to_string())));
-                        } else {
-                            todo!();
-                        }
-                    }
-                    for item in room.items.iter() {
-                        if item.room_child {
-                            let path = fix_missing_extension::<ItemLoader>(item.asset.clone());
-                            parent.spawn()
-                                .insert_bundle(TransformBundle {
-                                    local: Transform::from_translation(match item.at {
-                                        PrefabLocation::Free(v) => v,
-                                        _ => { unimplemented!() },
-                                    }).with_rotation(Quat::from_euler(EulerRot::XYZ, item.rotation.x, item.rotation.y, item.rotation.z)),
-                                    ..default()
-                                })
-                                .insert_bundle(VisibilityBundle::default())
-                                .insert(ToInitHandle::<Item>::new(asset_server.load(&path)))
-                                .insert(item.script_vars.clone())
-                                .insert(Name::new(item.label.as_ref().cloned().unwrap_or("unnamed item".to_string())));
                         } else {
                             todo!();
                         }

@@ -3,7 +3,7 @@ use ::std::time::Duration;
 
 use bevy::{prelude::*};
 use bevy_inspector_egui::{Inspectable, RegisterInspectable};
-use bevy_mod_scripting::{prelude::*, core::{event::ScriptLoaded}, lua::api::bevy::{LuaBevyAPIProvider, LuaEntity, LuaWorld},};
+use bevy_mod_scripting::{prelude::*, core::{event::ScriptLoaded}, lua::api::bevy::{LuaBevyAPIProvider, LuaEntity, LuaWorld, LuaVec3, LuaVec2, LuaQuat},};
 use iyes_loopless::prelude::FixedTimestepStage;
 use serde::{Deserialize, Serialize};
 
@@ -189,28 +189,36 @@ pub fn format_lua(values: LuaMultiValue) -> Result<String, LuaError> {
 
 #[derive(Clone, Debug, Default, Deserialize, Inspectable, PartialEq, Reflect, Serialize)]
 pub enum ScriptVar {
+    Array(Vec<ScriptVar>),
     Bool(bool),
     Color(#[serde(deserialize_with = "deserialize_hex_color", serialize_with = "serialize_hex_color")] Color),
     Int(i64),
     #[default]
     Nil,
     Num(f64),
-    String(String),
+    Quat(Quat),
+    Str(String),
+    Vec2(Vec2),
+    Vec3(Vec3),
 }
 impl<'lua> ToLua<'lua> for ScriptVar {
     fn to_lua(self, lua: &'lua Lua) -> Result<LuaValue<'lua>, LuaError> {
         match self {
+            ScriptVar::Array(v) => Ok(v.to_lua(lua)?),
             ScriptVar::Bool(b) => Ok(LuaValue::Boolean(b)),
             ScriptVar::Color(c) => Ok(RgbaColor::from(c).to_lua(lua)?),
             ScriptVar::Int(i) => Ok(LuaValue::Integer(i)),
             ScriptVar::Nil         => Ok(LuaValue::Nil),
             ScriptVar::Num(i) => Ok(LuaValue::Number(i)),
-            ScriptVar::String(s) => Ok(s.to_lua(lua)?),
+            ScriptVar::Quat(q) => Ok(LuaQuat::new(q).to_lua(lua)?),
+            ScriptVar::Str(s) => Ok(s.to_lua(lua)?),
+            ScriptVar::Vec2(v) => Ok(LuaVec2::new(v).to_lua(lua)?),
+            ScriptVar::Vec3(v) => Ok(LuaVec3::new(v).to_lua(lua)?),
         }
     }
 }
 impl LuaMod for ScriptVar {
-    fn mod_name() -> &'static str { "Var" }
+    fn mod_name() -> &'static str { "Vars" }
     fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
         table.set("all", lua.create_function(|ctx, entity: LuaEntity| {
             let world = ctx.globals().get::<_, LuaWorld>("world").unwrap();

@@ -40,8 +40,6 @@ pub struct Room {
     pub geometry: Vec<Geometry>,
     #[serde(default)]
     pub lights:   Vec<Light>,
-    #[serde(default)]
-    pub items:    Vec<PrefabInstance>,
 }
 
 #[derive(Clone, Component, Debug, Default, Deserialize, Serialize)]

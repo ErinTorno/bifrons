@@ -55,7 +55,7 @@ end
 -- Events
 
 function on_init()
-    g_vars = Var.all(entity)
+    g_vars = Vars.all(entity)
     g_light = new_light():spawn()
     world:push_child(entity, g_light)
     set_lit(true)

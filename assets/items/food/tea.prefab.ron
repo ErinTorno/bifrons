@@ -1,7 +1,7 @@
 #![enable(implicit_some)]
 #![enable(unwrap_newtypes)]
 #![enable(unwrap_variant_newtypes)]
-Item(
+Prefab(
     scripts: ["items/lantern.lua"],
     lines: {
         "name": "Tea",
@@ -23,6 +23,5 @@ Item(
         "name#sw": "Sakura white tea",
     },
     tags: ["lightsource", "weapon"],
-    equip_slots: ["hand_left", "hand_right"],
     // animate NoChange color
 )

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use bevy::{prelude::*, render::{render_resource::{AddressMode, SamplerDescriptor, FilterMode}, texture::ImageSampler}, asset::Asset};
+use bevy_inspector_egui::Inspectable;
 use bevy_mod_scripting::{lua::api::bevy::{LuaWorld, LuaHandleId, LuaEntity}, api::ScriptRef};
 use mlua::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -109,7 +110,7 @@ impl LuaMod for Atlas {
     }
 }
 
-#[derive(Clone, Component, Debug, Default)]
+#[derive(Clone, Component, Debug, Default, Inspectable)]
 pub struct LoadedMaterials {
     pub by_name: HashMap<String, Handle<StandardMaterial>>,
 }

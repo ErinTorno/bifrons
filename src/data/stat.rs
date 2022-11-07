@@ -81,6 +81,7 @@ pub struct Pool {
 }
 impl Pool {
     pub fn cap(&self) -> f32 { self.base + self.modifier }
+    pub fn ratio(&self) -> f32 { self.current / self.cap() }
 }
 impl Add<f32> for Pool {
     type Output = Pool;
@@ -118,6 +119,7 @@ impl LuaUserData for Pool {
         fields.add_field_method_set("current", |_, this, current: f32| Ok(this.current = current.min(this.cap()).max(0.)));
         fields.add_field_method_get("mod", |_, this| Ok(this.modifier));
         fields.add_field_method_set("mod", |_, this, modifier| Ok(this.modifier = modifier));
+        fields.add_field_method_get("ratio", |_, this| Ok(this.ratio()));
     }
 
     fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
@@ -163,6 +165,14 @@ impl LuaMod for Pool {
             if let Some(ent) = ctx.globals().get::<_, LuaWorld>("world").unwrap().read().get_entity(entity.inner()?) {
                 if let Some(attributes) = ent.get::<Attributes>() {
                     return Ok(attributes.pools.get(&name).map(Pool::cap));
+                }
+            }
+            Ok(None)
+        })?)?;
+        table.set("ratio", lua.create_function(|ctx, (entity, name): (LuaEntity, String)| {
+            if let Some(ent) = ctx.globals().get::<_, LuaWorld>("world").unwrap().read().get_entity(entity.inner()?) {
+                if let Some(attributes) = ent.get::<Attributes>() {
+                    return Ok(attributes.pools.get(&name).map(|p| p.ratio()));
                 }
             }
             Ok(None)

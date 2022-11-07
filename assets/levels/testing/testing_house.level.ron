@@ -51,13 +51,14 @@ Level(
                 "main": (shape: Rect(w: 7, h: 11)),
             },
             prefabs: [
-                (asset: "props/furniture/end_table",          at: Free(-2.9, 0., 2.)), // can drop .prefab.ron extension here, since it already knows it'll need that
-                (asset: "props/furniture/paintings/painting", at: Free(-2.3, 1., -5.8), rotation: (0., 0., 0.3926))
-            ],
-            items: [
+                (asset: "props/furniture/end_table", at: Free(-2.9, 0., 2.)), // can drop .prefab.ron extension here, since it already knows it'll need that
+                (asset: "props/furniture/painting",  at: Free(-2.3, 1., -5.8), rotation: (0., 0., 0.3926), script_vars: {
+                    // "painting_variant": Str("book_guy"),
+                    // "painting_color":   Color("#ff00bc"),
+                }),
                 (
                     label: "foyer_lantern",
-                    asset: "items/lantern", // can drop .item.ron extension here, since it already knows it'll need that
+                    asset: "items/lantern", // dropped extension, see above
                     at: Free(-3, 0.34, 1.9),
                     rotation: (0., 1.0471, 0.),
                     script_vars: {
