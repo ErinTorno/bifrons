@@ -1,10 +1,10 @@
-use std::{collections::HashMap};
+use std::{collections::{HashMap, HashSet}};
 
 use bevy::{prelude::*};
 use bevy_mod_scripting::{prelude::*};
 use iyes_loopless::prelude::IntoConditionalSystem;
 
-use crate::{data::{level::*, material::{TextureMaterial, AtlasIndex, TexMatInfo}, geometry::Shape, prefab::{PrefabLoader, Prefab}}, scripting::random};
+use crate::{data::{level::*, material::{TextureMaterial, AtlasIndex, TexMatInfo}, geometry::Shape, prefab::{PrefabLoader, Prefab}}, scripting::{random, AwaitScript, event::ON_ROOM_REVEAL, ScriptVar}};
 
 use super::{texture::{MissingTexture, Background}, common::{fix_missing_extension, ToInitHandle}};
 
@@ -77,6 +77,18 @@ pub fn reset_loaded_level(
             mat.base_color = level.background;
         }
 
+        let scripts: Vec<Script<LuaFile>> = level.scripts.iter().map(|path| {
+            let handle = asset_server.load::<LuaFile, _>(path);
+            Script::<LuaFile>::new(path.clone(), handle)
+        }).collect();
+
+        let script_ids: HashSet<u32> = scripts.iter().map(Script::id).collect();
+        
+        commands.entity(st.level_entity)
+            .remove::<ScriptCollection::<LuaFile>>()
+            .insert(Name::from(level.name.clone()))
+            .insert(ScriptCollection::<LuaFile> { scripts });
+
         let background_texmat = TextureMaterial::BACKGROUND;
         let missing_texmat    = TextureMaterial::MISSING;
         let lvl_mats: HashMap<&String, Handle<StandardMaterial>> = level.materials.iter()
@@ -84,7 +96,10 @@ pub fn reset_loaded_level(
             .collect();
         
         for (room_name, room) in level.rooms.iter() {
-            commands.spawn().insert_bundle(VisibilityBundle::default())
+            let room_entity = commands.spawn().insert_bundle(VisibilityBundle {
+                    visibility: Visibility { is_visible: room.reveal_before_entry },
+                    ..VisibilityBundle::default()
+                })
                 .insert(Name::from(room_name.clone()))
                 .insert_bundle(TransformBundle {
                     local: Transform::from_translation(room.pos),
@@ -155,18 +170,23 @@ pub fn reset_loaded_level(
                             todo!();
                         }
                     }
+                    parent.parent_entity()
                 });
+
+                if room.reveal_before_entry {
+                    let mut args = HashMap::<String, ScriptVar>::new();
+                    args.insert("name".into(), room_name.clone().into());
+                    args.insert("entity".into(), room_entity.clone().into());
+                    commands.entity(room_entity).insert(AwaitScript {
+                        script_ids: script_ids.clone(),
+                        event: LuaEvent {
+                            hook_name: ON_ROOM_REVEAL.into(),
+                            args: (args,).into(),
+                            recipients: Recipients::All,
+                        },
+                    });
+                }
         }
-        
-        commands.entity(st.level_entity)
-            .remove::<ScriptCollection::<LuaFile>>()
-            .insert(Name::from(level.name.clone()))
-            .insert(ScriptCollection::<LuaFile> {
-                scripts: level.scripts.iter().map(|path| {
-                    let handle = asset_server.load::<LuaFile, _>(path);
-                    Script::<LuaFile>::new(path.clone(), handle)
-                }).collect()
-            });
         st.should_reset = false;
     }
 }

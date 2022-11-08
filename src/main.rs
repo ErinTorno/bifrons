@@ -2,6 +2,7 @@
 #![feature(float_next_up_down)]
 #![feature(hash_drain_filter)]
 #![feature(hash_raw_entry)]
+#![feature(iter_intersperse)]
 
 use std::{path::Path};
 
@@ -11,6 +12,7 @@ use bevy_kira_audio::prelude::*;
 use bevy::prelude::*;
 use bevy_mod_scripting::prelude::*;
 use data::{prefab::{Prefab, PrefabLoader}, level::{Level, LevelLoader}};
+use scripting::ManyScriptVars;
 
 mod data;
 mod scripting;
@@ -32,7 +34,7 @@ fn main() {
         .add_plugin(system::scene::ScenePlugin)
         .add_plugin(system::texture::TexturePlugin)
         .insert_resource(FileAssetIo::new(Path::new("./assets"), false))
-        .add_script_host::<LuaScriptHost<()>,_>(CoreStage::PostUpdate)
+        .add_script_host::<LuaScriptHost<ManyScriptVars>,_>(CoreStage::PostUpdate)
         .add_asset::<Prefab>()
         .add_asset::<Level>()
         .init_asset_loader::<PrefabLoader>()

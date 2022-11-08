@@ -24,10 +24,11 @@
         },
         materials: {
             "painting": (
-                layer:       Outline,
-                texture:     "props/furniture/paintings/blank.png",
-                alpha_blend: true,
-                color:       "#5e292f",
+                layer:          Outline,
+                texture:        "props/furniture/paintings/blank.png",
+                normal_texture: "props/paper_n.png",
+                alpha_blend:    true,
+                color:          "#5e292f",
             ),
         },
     ),

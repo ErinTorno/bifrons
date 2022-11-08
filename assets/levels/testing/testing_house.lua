@@ -1,7 +1,7 @@
 local colors = {}
 
 function on_init()
-    print("testing_house.lua on_init ran for " .. Level.name() .. " loaded at " .. string(Time.elapsed() .. " seconds"))
+    Log.info("testing_house.lua on_init ran on behalf of {}; loaded at {} seconds", Level.name(), Time.elapsed())
     table.insert(colors, Color.hex("#f3d79b"))
     table.insert(colors, Color.hex("#f588f0"))
     table.insert(colors, Color.hex("#ffffff"))
@@ -36,8 +36,9 @@ end
 
 local g_timeofday       = 1
 local g_bkg_switch_secs = 5.0
-function on_update()
-    local secs = finite_or(Time.elapsed() % (g_bkg_switch_secs * #colors), 0)
+local g_lantern_islit   = true
+function on_update(time)
+    local secs = finite_or(time.elapsed % (g_bkg_switch_secs * #colors), 0)
 
     local next_timeofday = math.floor(secs / g_bkg_switch_secs) + 1
     if g_timeofday ~= next_timeofday then
@@ -45,20 +46,32 @@ function on_update()
         -- Color.set_background(colors[g_timeofday])
         if #colors > 1 then
             for _, light_ety in ipairs(Query.named("foyer_lights"):with("Light"):entities(world)) do
-                -- local light = world:get_component(light_ety, world:get_type_by_name("Light"))
-                -- Log.info("{}", light)
-                -- light.shadows_enabled = true
                 if true or math.floor(g_timeofday % 2) == 1 then
                     local light = Entity.light(light_ety)
                     light.color = colors[g_timeofday]
                     light:apply(light_ety)
                     -- Entity.show(light_ety)
-                    -- Log.info("@{}|show {} {}", g_timeofday, light_ety, light)
                 else
                     -- Entity.hide(light_ety)
-                    -- Log.info("@{}|hide {}", g_timeofday, light_ety)
                 end
             end
         end
+        -- g_lantern_islit = not g_lantern_islit
+        -- Message.new("set_lit")
+        --     :add_arg(g_lantern_islit)
+        --     :to_script("items/lantern.lua")
+        --     :send()
     end
+end
+
+function on_room_reveal(ctx)
+    Log.info("testing_house.lua on_room_reveal ctx = {}", ctx)
+    -- Message.new("on_whatever")
+    --     :add_arg(ctx.name)
+    --     :to_script("levels/testing/testing_house.lua")
+    --     :send()
+end
+
+function on_whatever(room_name)
+    Log.info("testing_house.lua on_whatever for {}", room_name)
 end

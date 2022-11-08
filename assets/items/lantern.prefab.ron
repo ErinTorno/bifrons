@@ -27,8 +27,10 @@ Prefab(
                 color:            "#4b4158",
                 texture:          "items/shutter_lantern.png",
                 emissive_texture: "items/shutter_lantern.png",
+                normal_texture:   "props/paper_n.png",
                 alpha_blend:      true,
                 atlas:            (rows: 1, columns: 3, width: 314, height: 512),
+                metallic:         0.8,
             ),
             "bkg": (
                 layer:            Background,

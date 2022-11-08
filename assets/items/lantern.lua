@@ -12,9 +12,8 @@ function new_light()
 end
 
 function set_lit(is_lit)
+    g_islit = is_lit
     if is_lit then
-        g_islit = true
-
         local handles = Material.handle_table(entity)
         local outline = handles.out:config()
         outline.color = g_vars.lantern_color or Color.hex("#e09b4d")
@@ -23,7 +22,7 @@ function set_lit(is_lit)
 
         local fire = handles.fire:config()
         local fire_color = g_vars.lantern_color or Color.hex("#e09b4d")
-        fire_color.a        = 0.5
+        fire_color.a        = 0.75
         fire.color          = fire_color
         fire.emissive_color = fire_color
         fire:apply(handles.fire)
@@ -32,22 +31,19 @@ function set_lit(is_lit)
             Entity.show(g_light)
         end
     else
-        g_islit = false
         if g_light then
             Entity.hide(g_light)
         end
 
         local handles = Material.handle_table(entity)
         local outline = handles.out:config()
+        outline.color          = g_vars.lantern_frame_color or Color.hex("#4b4158")
         outline.emissive_color = Color.black
         outline:apply(handles.out)
 
         local fire = handles.fire:config()
-        local fire_color    = g_vars.lantern_color or Color.hex("#e09b4d")
-        fire_color.a        = 0.0
-        fire.color          = fire_color
-        fire.emissive_color = fire_color
-        
+        fire.color          = Color.clear
+        fire.emissive_color = Color.clear
         fire:apply(handles.fire)
     end
 end
@@ -61,8 +57,28 @@ function on_init()
     set_lit(true)
 end
 
-function on_use()
-    set_lit(not g_islit)
+function on_interact(ctx)
+    if g_islit then
+        Prompt.new("extinguish", function()
+            set_lit(false)
+        end):add_to(ctx.prompts)
+    else
+        Prompt.new("light", function()
+            set_lit(true)
+        end):add_to(ctx.prompts)
+    end
+end
+
+function on_use(ctx)
+    local target = ctx.target
+    local tags = Entity.tags(target)
+    if tags["monster"] then
+        -- todo burn attack if close
+    else
+        Prompt.new("ignite", function()
+            Log.info("todo")
+        end):enabled(g_islit):add_to(ctx.prompts)
+    end
 end
 
 function on_equip()

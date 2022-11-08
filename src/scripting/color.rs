@@ -97,7 +97,17 @@ impl LuaMod for RgbaColor {
             })?
         )?;
         table.set("black", RgbaColor::from(Color::BLACK))?;
+        table.set("clear", RgbaColor { r: 0., g: 0., b: 0., a: 0.})?;
         table.set("white", RgbaColor::from(Color::WHITE))?;
+        table.set("red", RgbaColor::from(Color::hex("8d3e29").unwrap()))?;
+        table.set("green", RgbaColor::from(Color::hex("579035").unwrap()))?;
+        table.set("blue", RgbaColor::from(Color::hex("5f97b6").unwrap()))?;
+        table.set("bone", RgbaColor::from(Color::hex("deceb4").unwrap()))?;
+        table.set("burgundy", RgbaColor::from(Color::hex("5e292f").unwrap()))?;
+        table.set("icy", RgbaColor::from(Color::hex("9cabb1").unwrap()))?;
+        table.set("orange", RgbaColor::from(Color::hex("e09b4d").unwrap()))?;
+        table.set("sycamore", RgbaColor::from(Color::hex("799240").unwrap()))?;
+        table.set("wine",   RgbaColor::from(Color::hex("4b4158").unwrap()))?;
         Ok(())
     }
 }
