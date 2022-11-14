@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use ::std::sync::Mutex;
 
 use bevy::{prelude::*, reflect::*};
-use bevy_mod_scripting::{prelude::*, lua::api::bevy::{LuaEntity, LuaWorld}, api::ScriptRef};
+use bevy_mod_scripting::{prelude::*, lua::api::bevy::{LuaEntity, LuaWorld}};
 use mlua::Lua;
 
 use crate::data::{prefab::Tags};

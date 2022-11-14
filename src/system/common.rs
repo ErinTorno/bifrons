@@ -1,6 +1,6 @@
-use std::{collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, ffi::OsStr};
+use std::{collections::hash_map::DefaultHasher, hash::{Hash, Hasher}};
 
-use bevy::{prelude::{Component, Handle}, asset::{AssetLoader, Asset}, reflect::TypeUuid};
+use bevy::{prelude::{Component, Handle}, asset::{AssetLoader, Asset}};
 use bevy_inspector_egui::Inspectable;
 use ghost::phantom;
 use std::path::Path;

@@ -6,7 +6,7 @@ use iyes_loopless::prelude::IntoConditionalSystem;
 
 use crate::{data::{level::*, material::{TextureMaterial, AtlasIndex, TexMatInfo}, geometry::Shape, prefab::{PrefabLoader, Prefab}}, scripting::{random, AwaitScript, event::ON_ROOM_REVEAL, ScriptVar}, util::InsertableWithPredicate};
 
-use super::{texture::{MissingTexture, Background}, common::{fix_missing_extension, ToInitHandle}, editor::AssetInfo};
+use super::{texture::{MissingTexture, Background}, common::{fix_missing_extension, ToInitHandle}};
 
 #[derive(Clone, Debug, Default)]
 pub struct LevelPlugin;
@@ -27,18 +27,16 @@ impl Plugin for LevelPlugin {
 
 #[derive(Default)]
 pub struct LoadingLevel {
-    pub asset_info: Option<AssetInfo>,
     pub handle: Handle<Level>,
 }
 
 pub fn startup(mut st: ResMut<LoadingLevel>, asset_server: Res<AssetServer>) {
     let path      = "levels/testing/testing_house.level.ron";
     st.handle     = asset_server.load(path);
-    st.asset_info = Some(AssetInfo::new(path));
 }
 
 pub fn load_level(
-    mut st:        ResMut<LoadingLevel>,
+    st:            Res<LoadingLevel>,
     mut commands:  Commands,
     levels:        Res<Assets<Level>>,
 ) {
@@ -47,9 +45,6 @@ pub fn load_level(
             .insert_bundle(VisibilityBundle::default())
             .insert_bundle(TransformBundle::default())
             .id();
-        if let Some(info) = st.asset_info.take() {
-            commands.spawn().insert(info);
-        }
         commands.remove_resource::<LoadingLevel>();
         commands
             .insert_resource(LoadedLevel {

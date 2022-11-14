@@ -1,11 +1,7 @@
-
-use std::collections::{HashMap, HashSet};
-
-use bevy_mod_scripting::api::wrappers::ScriptValue;
 use mlua::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::scripting::{LuaScriptVars, LuaMod, ScriptVar};
+use crate::scripting::{LuaMod};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Setting {

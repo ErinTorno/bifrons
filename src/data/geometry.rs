@@ -3,8 +3,6 @@ use std::{f32::consts::FRAC_PI_4};
 use bevy::{prelude::*, render::{mesh::{Mesh, Indices}, render_resource::{PrimitiveTopology}}, ecs::{system::{EntityCommands}, world::EntityMut}};
 use bevy_inspector_egui::Inspectable;
 use bevy_mod_scripting::lua::api::bevy::{LuaVec3, LuaWorld, LuaEntity};
-use bevy_mod_scripting::api::lua::ReflectLuaProxyable;
-use bevy_rapier3d::rapier::prelude::*;
 use mlua::prelude::*;
 use serde::{Deserialize, Serialize};
 

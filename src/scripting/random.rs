@@ -1,7 +1,6 @@
 use ::std::sync::Mutex;
-use std::{sync::atomic::{AtomicU64, Ordering}, mem::size_of};
+use std::{sync::atomic::{AtomicU64, Ordering}};
 
-use bevy::prelude::*;
 use bevy_mod_scripting::{prelude::*};
 use mlua::Lua;
 use rand::{prelude::*, distributions::uniform::SampleUniform};

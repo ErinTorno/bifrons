@@ -1,11 +1,11 @@
 use std::collections::{HashMap, HashSet};
 
 use bevy::{prelude::*, asset::{LoadContext, AssetLoader, LoadedAsset}, utils::BoxedFuture, reflect::TypeUuid};
-use bevy_mod_scripting::{api::wrappers::ScriptValue, lua::api::bevy::{LuaWorld, LuaEntity}};
+use bevy_mod_scripting::{lua::api::bevy::{LuaWorld, LuaEntity}};
 use mlua::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::{scripting::{LuaScriptVars, LuaMod, ScriptVar, LuaHandle, random::random_range}, system::common::fix_missing_extension};
+use crate::{scripting::{LuaScriptVars, LuaMod, LuaHandle, random::random_range}, system::common::fix_missing_extension};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RolledRow {
@@ -73,11 +73,8 @@ impl FormList {
                         InjectCommand::Add(row) => {
                            rows.insert(row.clone())
                         },
-                        InjectCommand::Insert(key, row) => {
-                            if key != row {
-                                panic!("Keys and entries in Union FormLists are the same, but InjectCommand had distict values for them (key is {}, val is {})", key, row);
-                            }
-                            rows.insert(row.clone())
+                        InjectCommand::Insert(_, _) => {
+                            panic!("Union FormLists do not support the Insert command");
                         },
                         InjectCommand::Remove(row) => {
                             rows.remove(row)
@@ -96,7 +93,7 @@ impl FormList {
             FormList::Weighted(rows) => {
                 for command in commands {
                     match command {
-                        InjectCommand::Add(row) => {
+                        InjectCommand::Add(_) => {
                             panic!("Weighted FormLists do not support the Add command");
                         },
                         InjectCommand::Insert(asset, row) => {
@@ -362,6 +359,28 @@ impl LuaUserData for InjectRollEach {
 
     fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(format!("{:?}", this)));
+        methods.add_method_mut("add", |_, this, table: LuaTable| {
+            let asset  = table.get("asset")?;
+            let chance = table.get("chance")?;
+            let vars   = LuaScriptVars(table.get("vars")?);
+            this.0.push(InjectCommand::Add(RolledRow { asset, chance, vars }));
+            Ok(())
+        });
+        methods.add_method("apply", |_, this, mut formlist: FormList| {
+            let is_success = formlist.inject_roll_each(&this.0);
+            Ok((is_success, formlist))
+        });
+        methods.add_method_mut("insert", |_, this, (index, table): (usize, LuaTable)| {
+            let asset  = table.get("asset")?;
+            let chance = table.get("chance")?;
+            let vars   = LuaScriptVars(table.get("vars")?);
+            this.0.push(InjectCommand::Insert(index, RolledRow { asset, chance, vars }));
+            Ok(())
+        });
+        methods.add_method_mut("remove", |_, this, key| {
+            this.0.push(InjectCommand::Remove(key));
+            Ok(())
+        });
         
     }
 }
@@ -375,6 +394,18 @@ impl LuaUserData for InjectUnion {
 
     fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(format!("{:?}", this)));
+        methods.add_method_mut("add", |_, this, entry: String| {
+            this.0.push(InjectCommand::Add(entry));
+            Ok(())
+        });
+        methods.add_method("apply", |_, this, mut formlist: FormList| {
+            let is_success = formlist.inject_union(&this.0);
+            Ok((is_success, formlist))
+        });
+        methods.add_method_mut("remove", |_, this, key| {
+            this.0.push(InjectCommand::Remove(key));
+            Ok(())
+        });
     }
 }
 
@@ -393,6 +424,10 @@ impl LuaUserData for InjectWeighted {
             let vars   = LuaScriptVars(table.get("vars")?);
             this.0.push(InjectCommand::Insert(asset, WeightedRow { weight, vars }));
             Ok(())
+        });
+        methods.add_method("apply", |_, this, mut formlist: FormList| {
+            let is_success = formlist.inject_weighted(&this.0);
+            Ok((is_success, formlist))
         });
         methods.add_method_mut("insert", |_, this, (asset, table): (String, LuaTable)| {
             let weight = table.get("weight")?;

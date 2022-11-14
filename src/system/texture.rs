@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 
 use bevy::{prelude::*, render::{texture::ImageSampler, render_resource::{SamplerDescriptor, FilterMode, Extent3d, TextureDimension, TextureFormat}}, asset::LoadState};
-use bevy_inspector_egui::{Inspectable, RegisterInspectable};
+use bevy_inspector_egui::{RegisterInspectable};
 
 use crate::data::{anim::ColorLayer, material::{TexMatInfo, LoadedMaterials}};
 

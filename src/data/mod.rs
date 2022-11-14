@@ -7,7 +7,6 @@ pub mod item;
 pub mod level;
 pub mod lang;
 pub mod material;
-pub mod palette;
 pub mod prefab;
 pub mod setting;
 pub mod stat;

@@ -1,4 +1,4 @@
-use std::{sync::Mutex, collections::{HashMap, HashSet}, hash::Hash, path::Path};
+use std::{sync::Mutex, collections::{HashMap, HashSet}};
 use ::std::time::Duration;
 
 use bevy::{prelude::*};
@@ -7,7 +7,7 @@ use bevy_mod_scripting::{prelude::*, core::{event::ScriptLoaded}, lua::api::bevy
 use iyes_loopless::prelude::FixedTimestepStage;
 use serde::{Deserialize, Serialize};
 
-use crate::{data::{stat::{Stat, Pool}, material::{TextureMaterial, TexMatInfo}, input::ActionState, formlist::{FormList, InjectCommands}, level::Level}, system::editor::AssetInfo};
+use crate::{data::{stat::{Stat, Pool}, material::{TextureMaterial, TexMatInfo}, input::ActionState, formlist::{FormList, InjectCommands}, level::Level, geometry::{Light, LightAnim, LightKind}}};
 use crate::util::serialize::*;
 
 use self::{event::{ON_UPDATE, ON_INIT}, color::RgbaColor, time::LuaTime, message::MessageQueue, registry::Registry};
@@ -15,7 +15,6 @@ use self::{event::{ON_UPDATE, ON_INIT}, color::RgbaColor, time::LuaTime, message
 pub mod color;
 pub mod entity;
 pub mod event;
-pub mod geometry;
 pub mod level;
 pub mod log;
 pub mod message;
@@ -50,7 +49,6 @@ impl Plugin for ScriptPlugin {
             .add_api_provider::<LuaScriptHost<ManyScriptVars>>(Box::new(PreludeAPIProvider))
             .add_api_provider::<LuaScriptHost<ManyScriptVars>>(Box::new(color::ColorAPIProvider))
             .add_api_provider::<LuaScriptHost<ManyScriptVars>>(Box::new(entity::EntityAPIProvider))
-            .add_api_provider::<LuaScriptHost<ManyScriptVars>>(Box::new(geometry::GeometryAPIProvider))
             .add_api_provider::<LuaScriptHost<ManyScriptVars>>(Box::new(level::LevelAPIProvider))
             .add_api_provider::<LuaScriptHost<ManyScriptVars>>(Box::new(log::LogAPIProvider))
             .add_api_provider::<LuaScriptHost<ManyScriptVars>>(Box::new(message::MessageAPIProvider))
@@ -64,9 +62,11 @@ impl Plugin for ScriptPlugin {
 
 pub fn register_lua_mods(lua: &Lua) -> Result<(), LuaError> {
     init_luamod::<ActionState>(lua)?;
-    init_luamod::<AssetInfo>(lua)?;
     init_luamod::<FormList>(lua)?;
     init_luamod::<InjectCommands>(lua)?;
+    init_luamod::<Light>(lua)?;
+    init_luamod::<LightAnim>(lua)?;
+    init_luamod::<LightKind>(lua)?;
     init_luamod::<Registry>(lua)?;
     init_luamod::<ScriptVar>(lua)?;
     init_luamod::<TextureMaterial>(lua)?;
@@ -171,6 +171,7 @@ fn attach_prelude_lua(ctx: &mut Lua) -> Result<(), mlua::Error> {
     ctx.globals().set("format", ctx.create_function(|_ctx, values: LuaMultiValue| {
         format_lua(values)
     })?)?;
+    ctx.globals().set("PI", std::f64::consts::PI)?;
     ctx.globals().set("string", ctx.create_function(|_ctx, value: LuaValue| {
         lua_to_string(value)
     })?)?;

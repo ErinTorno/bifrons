@@ -4,7 +4,7 @@ use bevy::{prelude::*, transform::TransformBundle};
 use bevy_mod_scripting::{prelude::*, lua::api::bevy::{LuaWorld, LuaEntity, LuaVec3}};
 use mlua::Lua;
 
-use crate::{system::{level::{LoadedLevel, LoadingLevel}, common::{ToInitHandle, fix_missing_extension}, editor::AssetInfo}, data::level::{LevelPiece, LevelPieceLoader, Level, LevelLoader}};
+use crate::{system::{level::{LoadedLevel}, common::{ToInitHandle, fix_missing_extension}}, data::level::{LevelPiece, LevelPieceLoader, Level, LevelLoader}};
 
 use super::LuaHandle;
 
@@ -35,7 +35,6 @@ fn attach_level_lua(ctx: &mut Lua) -> Result<(), mlua::Error> {
             };
             let mut w = world.write();
             w.remove_resource::<LoadedLevel>();
-            w.insert_resource(LoadingLevel { handle, asset_info: Some(AssetInfo::new(&path)) });
             Ok(())
         })?
     )?;
@@ -84,8 +83,7 @@ fn attach_level_lua(ctx: &mut Lua) -> Result<(), mlua::Error> {
                     .insert_bundle(TransformBundle {
                         local: Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, rotation.x, rotation.y, rotation.z)).with_translation(translation),
                         ..default()
-                    })
-                    .insert(AssetInfo::new(&file));
+                    });
                 id
             };
 

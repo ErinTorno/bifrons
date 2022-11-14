@@ -2,7 +2,6 @@ use std::f32::consts::PI;
 
 use bevy::{prelude::*};
 use bevy_inspector_egui::RegisterInspectable;
-use bevy_mod_scripting::lua::api::RegisterForeignLuaType;
 
 use crate::data::geometry::{LightAnim, LightAnimState, Light};
 

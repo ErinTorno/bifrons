@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use bevy::{prelude::*, render::{render_resource::{AddressMode, SamplerDescriptor, FilterMode}, texture::ImageSampler}, asset::Asset};
+use bevy::{prelude::*, render::{render_resource::{AddressMode, SamplerDescriptor, FilterMode}, texture::ImageSampler}};
 use bevy_inspector_egui::Inspectable;
-use bevy_mod_scripting::{lua::api::bevy::{LuaWorld, LuaHandleId, LuaEntity}, api::ScriptRef};
+use bevy_mod_scripting::{lua::api::bevy::{LuaWorld, LuaEntity}};
 use mlua::prelude::*;
 use serde::{Deserialize, Serialize};
 

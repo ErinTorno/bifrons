@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use bevy::prelude::{UVec2, Entity, Vec3};
+use bevy::prelude::{Entity, Vec3};
 use serde::{Deserialize, Serialize};
 
 // Config

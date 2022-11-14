@@ -1,6 +1,6 @@
 use ::std::sync::Mutex;
 
-use bevy::prelude::{info, ClearColor, Color};
+use bevy::prelude::{ClearColor, Color};
 use bevy_mod_scripting::{prelude::*, lua::api::bevy::LuaWorld};
 use mlua::Lua;
 

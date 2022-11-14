@@ -1,9 +1,4 @@
 use bevy::prelude::*;
-
-use std::{collections::HashMap, default};
-
-use bevy::prelude::*;
-use bevy_inspector_egui::Inspectable;
 use serde::*;
 
 use crate::data::input::{ActionState, InputMap, InputTS, InputData};
@@ -79,7 +74,6 @@ pub fn cam_movement(
 ) {
     let window = windows.get_primary().unwrap();
     let window_size = Vec2::new(window.width() as f32, window.height() as f32);
-    let elapsed_secs = time.seconds_since_startup();
     for (mut transform, camera) in cam_query.iter_mut() {
         if let Some(entity) = camera.controller {
             if let Some((a_trans, mut a_state, a_inputmap)) = actor_query.get_mut(entity).ok() {

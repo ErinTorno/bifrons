@@ -1,6 +1,6 @@
 use ::std::sync::Mutex;
 
-use bevy::{prelude::{info}, time::Time};
+use bevy::{time::Time};
 use bevy_inspector_egui::Inspectable;
 use bevy_mod_scripting::{prelude::*, lua::api::bevy::LuaWorld};
 use mlua::Lua;

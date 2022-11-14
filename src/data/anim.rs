@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use bevy::{prelude::*, render::{mesh::{Mesh, Indices}, render_resource::PrimitiveTopology}, time::Timer, utils::{default, Uuid}, scene::{SceneBundle, Scene}, ecs::system::EntityCommands};
+use bevy::{prelude::*, render::{mesh::{Mesh}}, time::Timer, utils::{default, Uuid}, scene::{SceneBundle, Scene}, ecs::system::EntityCommands};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{system::common::ToInit, scripting::random::random_range};
-use crate::{util::serialize::*, system::texture::{MaterialColors, Background}};
+use crate::{system::texture::{MaterialColors, Background}};
 
 use super::{geometry::Shape, material::*};
 
