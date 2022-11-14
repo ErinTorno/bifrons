@@ -2,7 +2,7 @@
 #![enable(unwrap_newtypes)]
 #![enable(unwrap_variant_newtypes)]
 (
-    tags: ["furniture", "wood"],
+    tags: ["flammable", "furniture", "wood"],
     lines: {
         "english": {
             "name": "End table",
@@ -17,18 +17,23 @@
         "damage_mat": Str("outline"),
     },
     attributes: (
-        pools: { "health":   (base: 6., current: 2.) },
+        pools: { "health":   (base: 6., current: 6.) },
         stats: { "hardness": (base: 2.) },
     ),
     animation: (
         frames: {
             "idle": [],
         },
+        skeleton: (name: "root"),
         parts: {
-            "table": Scene(asset: "props/furniture/end_table.gltf#Scene0", scale: (0.75, 0.75, 0.75), mat_overrides: {
-                "table":     "outline",
-                "table_bkg": "background",
-            }),
+            "table": Scene(
+                bone:  (name: "root", scale: (0.75, 0.75, 0.75)),
+                asset: "props/furniture/end_table.gltf#Scene0",
+                mat_overrides: {
+                    "table":     "outline",
+                    "table_bkg": "background",
+                },
+            ),
         },
         materials: {
             "outline": (

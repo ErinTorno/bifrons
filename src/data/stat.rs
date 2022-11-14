@@ -10,9 +10,9 @@ use crate::scripting::LuaMod;
 #[derive(Clone, Component, Debug, Default, Deserialize, Serialize)]
 pub struct Attributes {
     #[serde(default)]
-    pools: HashMap<String, Pool>,
+    pub pools: HashMap<String, Pool>,
     #[serde(default)]
-    stats: HashMap<String, Stat>,
+    pub stats: HashMap<String, Stat>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

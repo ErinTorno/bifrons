@@ -1,0 +1,42 @@
+#![enable(implicit_some)]
+#![enable(unwrap_newtypes)]
+#![enable(unwrap_variant_newtypes)]
+(
+    materials: {
+        "floor": (
+            layer:   Outline,
+            color:   "#808078",
+            texture: "tiles/floor_squiggle_small.png",
+            mode:    Repeat(step: 2., on_step: Rotate180),
+        ),
+    },
+    room: (
+        pos: (0., -0.5, 0.),
+        grid: {
+            "main": (shape: Rect(w: 7, h: 11)),
+        },
+        prefabs: [
+            (asset: "props/furniture/end_table", at: Free(-2.9, 0., 0.)),
+            (asset: "items/cleaver",             at: Free(-2.65, 0.555, 0.), rotation: (0., 2., -2.)),
+            (
+                asset: "items/lantern",
+                at: Free(-3, 0.34, 0.1),
+                rotation: (0., 1.0471, 0.),
+                script_vars: {
+                    "lantern_color":    Color("#bb643a"),
+                    "lantern_emissive": Color("#8d3e29"),
+                },
+            ),
+        ],
+        geometry: [
+            (
+                label:     "floor",
+                pos:       (0., 0., 0.),
+                shape:     Quad(w: 7., h: 5.),
+                rotation:  (-1.57079632679, 0., 0.),
+                materials: ["background", "floor"],
+                is_solid:  true,
+            ),
+        ],
+    ),
+)

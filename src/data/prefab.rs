@@ -5,22 +5,25 @@ use crate::scripting::LuaScriptVars;
 
 use super::{anim::Animation, lang::Lines, item::Item, stat::Attributes};
 
+#[derive(Clone, Component, Debug)]
+pub struct Tags(pub HashSet<String>);
+
 #[derive(Clone, Debug, Deserialize, Serialize, TypeUuid)]
 #[uuid = "68fbd47c-252c-409d-94f0-f581051ca8a5"]
 pub struct Prefab {
     #[serde(default)]
-    pub scripts:   Vec<String>,
+    pub scripts:     Vec<String>,
     #[serde(default)]
     pub script_vars: LuaScriptVars,
     #[serde(default)]
-    pub tags:      HashSet<String>,
+    pub tags:        HashSet<String>,
     #[serde(default)]
-    pub lines:      Lines,
-    pub animation:  Animation,
+    pub lines:       Lines,
+    pub animation:   Animation,
     #[serde(default)]
-    pub attributes: Option<Attributes>,
+    pub attributes:  Option<Attributes>,
     #[serde(default)]
-    pub item:       Option<Item>,
+    pub item:        Option<Item>,
 }
 
 #[derive(Default)]

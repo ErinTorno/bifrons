@@ -21,11 +21,16 @@ end
 function on_init()
     g_vars       = Vars.all(entity)
     g_variant    = g_vars.painting_variant or Random.value(g_all_variants)
+    local handles = Material.handle_table(entity)
     local color  = g_vars.painting_color or Random.value(all_colors())
     
-    local handle = Material.handle_table(entity).painting
-    local mat    = handle:config()
+    local mat    = handles.painting:get()
     mat.texture  = format("props/furniture/paintings/{}.png", g_variant)
     mat.color    = color
-    mat:apply(handle)
+    mat:apply(handles.painting)
+
+    local frame_color = g_vars.painting_frame_color or Random.value(all_colors())
+    local mat    = handles.frame:get()
+    mat.color    = frame_color
+    mat:apply(handles.frame)
 end

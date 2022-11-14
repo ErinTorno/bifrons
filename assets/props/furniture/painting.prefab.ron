@@ -3,7 +3,7 @@
 #![enable(unwrap_variant_newtypes)]
 (
     scripts: ["props/furniture/painting.lua"],
-    tags: ["furniture", "wood"],
+    tags: ["flammable", "furniture", "wood"],
     lines: {
         "english": {
             "name": "Painting",
@@ -18,17 +18,31 @@
         frames: {
             "idle": [],
         },
+        skeleton: (name: "root"),
         parts: {
-            "bkg": Sprite(layer: Background, shape: Quad(w: 1., h: 1.), material: "background"),
-            "out": Sprite(layer: Outline,    shape: Quad(w: 1., h: 1.), material: "painting"),
+            "bkg":      Sprite(bone: (name: "root"), layer: Background, shape: Quad(w: 1.427, h: 1.427, d: 0.002),  material: "bkg", atlas_offset: (row: 0, col: 1)),
+            "frame":    Sprite(bone: (name: "root"), layer: Outline,    shape: Quad(w: 1.427, h: 1.427, d: 0.001),  material: "frame"),
+            "painting": Sprite(bone: (name: "root"), layer: Outline,    shape: Quad(w: 1., h: 1., one_sided: true), material: "painting", pos_offset: (0., 0.1308)),
         },
         materials: {
+            "bkg": (
+                layer:          Background,
+                atlas:          (rows: 1, columns: 2, width: 2048, height: 1024),
+                texture:        "props/furniture/painting_frame.png",
+                alpha_blend:    true,
+            ),
+            "frame": (
+                layer:          Outline,
+                atlas:          (rows: 1, columns: 2, width: 2048, height: 1024),
+                texture:        "props/furniture/painting_frame.png",
+                alpha_blend:    true,
+                color:          "#534a3b",
+            ),
             "painting": (
                 layer:          Outline,
                 texture:        "props/furniture/paintings/blank.png",
-                normal_texture: "props/paper_n.png",
                 alpha_blend:    true,
-                color:          "#5e292f",
+                color:          "#785c3b",
             ),
         },
     ),

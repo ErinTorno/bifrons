@@ -1,0 +1,42 @@
+#![enable(implicit_some)]
+#![enable(unwrap_newtypes)]
+#![enable(unwrap_variant_newtypes)]
+Prefab(
+    scripts: ["items/cleaver.lua"],
+    lines: {
+        "english": {
+            "name": "Cleaver",
+            "chop": "Chop {name}",
+        },
+    },
+    tags: ["knife", "metal", "weapon"],
+    item: (
+        equip_slots: ["hand"],
+    ),
+    animation: (
+        frames: {
+            "idle": [],
+        },
+        skeleton: (name: "root"),
+        parts: {
+            "bkg":  Sprite(bone: (name: "root"), layer: Background, shape: Quad(w: 0.177, h: 0.4), material: "bkg",  atlas_offset: (row: 0, col: 1)),
+            "out":  Sprite(bone: (name: "root"), layer: Outline,    shape: Quad(w: 0.177, h: 0.4), material: "out"),
+        },
+        materials: {
+            "out": (
+                layer:            Outline,
+                color:            "#9cabb1",
+                texture:          "items/cleaver.png",
+                alpha_blend:      true,
+                atlas:            (rows: 1, columns: 2, width: 430, height: 768),
+                metallic:         0.9,
+            ),
+            "bkg": (
+                layer:            Background,
+                texture:          "items/cleaver.png",
+                alpha_blend:      true,
+                atlas:            (rows: 1, columns: 2, width: 430, height: 768),
+            ),
+        },
+    ),
+)

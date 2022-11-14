@@ -1,7 +1,7 @@
 use bevy::{prelude::*};
 use bevy_inspector_egui::{Inspectable, RegisterInspectable};
 use bevy_mod_scripting::prelude::{ScriptCollection, LuaFile, Script};
-use crate::{system::common::ToInit, data::{prefab::*, input::{ActionState, InputMap}, material::{TexMatInfo, LoadedMaterials}}, scripting::LuaScriptVars};
+use crate::{system::common::ToInit, data::{prefab::*, input::{ActionState, InputMap}, material::{TexMatInfo, LoadedMaterials}, stat::Attributes}, scripting::LuaScriptVars, util::pair_clone};
 
 use super::{texture::{MaterialColors, Background}, camera::{ActiveCamera, Focus}, common::ToInitHandle};
 
@@ -46,21 +46,26 @@ pub fn spawn_prefab(
     prefabs:          Res<Assets<Prefab>>,
     mut meshes:       ResMut<Assets<Mesh>>,
     mut materials:    ResMut<Assets<StandardMaterial>>,
-    mut to_spawn:     Query<(Entity, &ToInitHandle<Prefab>, &mut LuaScriptVars, Option<&Player>, Option<&LoadedMaterials>)>,
+    mut to_spawn:     Query<(Entity, &ToInitHandle<Prefab>, &mut LuaScriptVars, Option<&Player>, Option<&LoadedMaterials>, Option<&mut Attributes>)>,
 ) {
-    for (entity, ToInitHandle(handle), mut script_vars, player, loaded_mats) in to_spawn.iter_mut() {
+    for (entity, ToInitHandle(handle), mut script_vars, player, loaded_mats, attributes) in to_spawn.iter_mut() {
         if let Some(prefab) = prefabs.get(handle) {
             let entity = commands.entity(entity)
                 .insert(ActionState::default())
                 .insert(InputMap::default())
                 .remove::<ToInitHandle<Prefab>>()
                 .id();
-            let mut loaded = prefab.animation.add_parts(&mut commands.entity(entity), mat_colors.as_mut(), &asset_server, &mut tex_mat_info, &background, meshes.as_mut(), materials.as_mut());
+            let mut loaded = prefab.animation.add_parts(entity, &mut commands, mat_colors.as_mut(), &asset_server, &mut tex_mat_info, &background, meshes.as_mut(), materials.as_mut());
             if let Some(mats) = loaded_mats {
                 loaded.by_name.extend((&mats.by_name).into_iter().map(|(k, v)| (k.clone(), v.clone())));
             }
             
             commands.entity(entity).insert(loaded);
+
+            if !prefab.tags.is_empty() {
+                commands.entity(entity)
+                    .insert(Tags(prefab.tags.clone()));
+            }
 
             if !prefab.scripts.is_empty() {
                 script_vars.merge(&prefab.script_vars);
@@ -73,8 +78,13 @@ pub fn spawn_prefab(
                     });
             }
             if let Some(attr) = &prefab.attributes {
-                commands.entity(entity)
-                    .insert(attr.clone());
+                if let Some(mut attributes) = attributes {
+                    attributes.pools.extend(attr.pools.iter().map(pair_clone));
+                    attributes.stats.extend(attr.stats.iter().map(pair_clone));
+                } else {
+                    commands.entity(entity)
+                        .insert(attr.clone());
+                }
             }
             if player.is_some() {
                 commands.spawn()

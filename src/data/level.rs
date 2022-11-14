@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use bevy::{prelude::*, utils::BoxedFuture, asset::*, reflect::TypeUuid};
 use serde::{Deserialize, Serialize};
 
-use super::{geometry::{Geometry, Light}, material::TextureMaterial, grid::CellID};
+use super::{geometry::{Geometry, Light}, material::TextureMaterial, grid::CellID, stat::Attributes};
 use crate::{util::serialize::*, scripting::LuaScriptVars};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -24,6 +24,8 @@ pub struct PrefabInstance {
     pub room_child: bool,
     #[serde(default)]
     pub script_vars: LuaScriptVars,
+    #[serde(default)]
+    pub attributes: Option<Attributes>,
 }
 fn default_room_child() -> bool { true }
 
@@ -31,9 +33,8 @@ fn default_room_child() -> bool { true }
 pub struct Room {
     #[serde(default)]
     pub reveal_before_entry: bool,
-    pub pos:      Vec3,
     #[serde(default)]
-    pub keep_loaded: bool,
+    pub pos:      Vec3,
     #[serde(default)]
     pub prefabs: Vec<PrefabInstance>,
     #[serde(default)]
@@ -50,13 +51,15 @@ pub struct InRoom {
 #[derive(Clone, Debug, Default, Deserialize, Serialize, TypeUuid)]
 #[uuid = "a491e648-a317-40e9-a1eb-69f4532f2258"]
 pub struct Level {
-    pub name:       String,
+    pub name:        String,
     #[serde(default = "default_scripts")]
-    pub scripts:    Vec<String>,
+    pub scripts:     Vec<String>,
+    #[serde(default)]
+    pub script_vars: LuaScriptVars,
     #[serde(default = "default_background", deserialize_with = "deserialize_hex_color", serialize_with = "serialize_hex_color")]
-    pub background: Color,
-    pub materials:  HashMap<String, TextureMaterial>,
-    pub rooms:      HashMap<String, Room>,
+    pub background:  Color,
+    pub materials:   HashMap<String, TextureMaterial>,
+    pub rooms:       HashMap<String, Room>,
 }
 pub fn default_background() -> Color { Color::BLACK }
 pub fn default_scripts() -> Vec<String> { Vec::new() }
@@ -71,13 +74,47 @@ impl AssetLoader for LevelLoader {
         load_context: &'a mut LoadContext,
     ) -> BoxedFuture<'a, Result<(), bevy::asset::Error>> {
         Box::pin(async move {
-            let actor: Level = ron::de::from_bytes(bytes)?;
-            load_context.set_default_asset(LoadedAsset::new(actor));
+            let level: Level = ron::de::from_bytes(bytes)?;
+            load_context.set_default_asset(LoadedAsset::new(level));
             Ok(())
         })
     }
 
     fn extensions(&self) -> &[&str] {
         &["level.ron"]
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, TypeUuid)]
+#[uuid = "bd99ef64-9fb7-4baf-abe1-160bfe862b28"]
+pub struct LevelPiece {
+    pub materials:   HashMap<String, TextureMaterial>,
+    pub room:        Room,
+    #[serde(default)]
+    pub tags:        HashSet<String>,
+    #[serde(default)]
+    pub scripts:     Vec<String>,
+    #[serde(default)]
+    pub script_vars: LuaScriptVars,
+}
+
+#[derive(Default)]
+pub struct LevelPieceLoader;
+
+impl AssetLoader for LevelPieceLoader {
+    fn load<'a>(
+        &'a self,
+        bytes: &'a [u8],
+        load_context: &'a mut LoadContext,
+    ) -> BoxedFuture<'a, Result<(), bevy::asset::Error>> {
+        Box::pin(async move {
+            let piece: LevelPiece = ron::de::from_bytes(bytes)?;
+            load_context.set_default_asset(LoadedAsset::new(piece));
+            Ok(())
+        })
+    }
+
+    fn extensions(&self) -> &[&str] {
+        &["piece.ron"]
     }
 }

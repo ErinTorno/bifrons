@@ -6,7 +6,7 @@ use bevy_mod_scripting::{lua::api::bevy::{LuaWorld, LuaHandleId, LuaEntity}, api
 use mlua::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::{util::serialize::*, scripting::{LuaMod, color::RgbaColor}};
+use crate::{util::serialize::*, scripting::{LuaMod, color::RgbaColor, LuaHandle}};
 
 use super::anim::{ColorLayer};
 
@@ -14,6 +14,14 @@ use super::anim::{ColorLayer};
 pub enum RepeatType {
     Identity,
     Rotate180,
+}
+impl RepeatType {
+    // pub fn map_uvs(&self, x: i32, y: i32, uvs: [f32; 4]) -> [f32; 4] {
+    //     match self {
+    //         RepeatType::Rotate180 if (x + y) % 2 == 0 => [uv_right, uv_left, uv_bottom, uv_top],
+    //         _ => uvs,
+    //     };
+    // }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -283,9 +291,9 @@ impl LuaUserData for TextureMaterial {
             let materials = w.get_resource_mut::<Assets<StandardMaterial>>();
             if materials.is_none() { return Err(LuaError::RuntimeError(format!("Unable to get Assets<StandardMaterial>"))); }
             let mut materials = materials.unwrap();
-            Ok(LuaMaterialHandle(materials.add(mat)))
+            Ok(LuaHandle::from(materials.add(mat)))
         });
-        methods.add_method("apply", |ctx, this, mat_handle: LuaMaterialHandle| {
+        methods.add_method("apply", |ctx, this, mat_handle: LuaHandle| {
             let world = ctx.globals().get::<_, LuaWorld>("world").unwrap();
             let mut w = world.write();
             let tex_handles = {
@@ -305,11 +313,11 @@ impl LuaUserData for TextureMaterial {
             if materials.is_none() { return Err(LuaError::RuntimeError(format!("Unable to get Assets<StandardMaterial>"))); }
             let mut materials = materials.unwrap();
 
-            if let Some(cur) = materials.get_mut(&mat_handle.0) {
+            if let Some(cur) = materials.get_mut(&mat_handle.handle.clone().typed_weak()) {
                 *cur = mat;
                 Ok(())
             } else {
-                Err(LuaError::RuntimeError(format!("No material was found associated with handle {:?}", mat_handle.0)))
+                Err(LuaError::RuntimeError(format!("No material was found associated with handle {:?}", mat_handle.handle)))
             }
         });
     }
@@ -321,7 +329,7 @@ impl LuaMod for TextureMaterial {
             let world = ctx.globals().get::<_, LuaWorld>("world").unwrap();
             let w = world.read();
             if let Some(handle) = w.get::<Handle<StandardMaterial>>(entity.inner()?) {
-                Ok(Some(LuaMaterialHandle(handle.clone())))
+                Ok(Some(LuaHandle::from(handle.clone())))
             } else { Ok(None) }
         })?)?;
         table.set("handle_table", lua.create_function(|ctx, entity: LuaEntity| {
@@ -331,7 +339,7 @@ impl LuaMod for TextureMaterial {
             if let Some(mats) = w.get::<LoadedMaterials>(entity) {
                 let table = ctx.create_table()?;
                 for (name, handle) in mats.by_name.iter() {
-                    table.set(name.as_str(), LuaMaterialHandle(handle.clone()))?;
+                    table.set(name.as_str(), LuaHandle::from(handle.clone()))?;
                 }
                 Ok(Some(table))
             } else { Ok(None) }
@@ -346,30 +354,6 @@ pub struct TextureHandles {
     pub texture:  Handle<Image>,
     pub normal:   Option<Handle<Image>>,
     pub emissive: Option<Handle<Image>>,
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct LuaMaterialHandle(pub Handle<StandardMaterial>);
-impl LuaUserData for LuaMaterialHandle {
-    fn add_fields<'lua, F: mlua::UserDataFields<'lua, Self>>(_: &mut F) {
-    }
-
-    fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
-        methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(format!("{:?}", this.0)));
-        methods.add_method("config", |lua, this, ()| {
-            let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
-            let w = world.read();
-            if let Some(tex_mat_info) = w.get_resource::<TexMatInfo>() {
-                if let Some(texmat) = tex_mat_info.materials.get(&this.0) {
-                    Ok(texmat.clone())
-                } else {
-                    Err(LuaError::RuntimeError(format!("TexMatInfo had no entry for {:?}", this.0)))
-                }
-            } else {
-                Err(LuaError::RuntimeError(format!("TexMatInfo not found")))
-            }
-        });
-    }
 }
 
 #[derive(Clone, Debug, Default)]

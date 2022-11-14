@@ -32,6 +32,22 @@ function on_init()
     --     Entity.hide(light_ety)
     -- end
     -- Level.reveal()
+    -- local wrc = "world_reset_count"
+    -- -- if not already in registry, this is skipped
+    -- local exists = Registry.contains(wrc)
+    -- Registry.update(wrc, function(i) return i + 1 end)
+    -- Registry.alloc_if_new(wrc, function() return 0 end)
+    -- local count = Registry.get(wrc)
+
+    -- let's cause an infinite loop!
+    -- Level.change("levels/testing/testing_house")
+    
+    Level.spawn_piece("pieces/kitchen", {
+        parent = entity,
+        name   = "kitchen",
+        reveal = true,
+        pos    = Vec3.new(0, 0, -10),
+    })
 end
 
 local g_timeofday       = 1
@@ -47,7 +63,7 @@ function on_update(time)
         if #colors > 1 then
             for _, light_ety in ipairs(Query.named("foyer_lights"):with("Light"):entities(world)) do
                 if true or math.floor(g_timeofday % 2) == 1 then
-                    local light = Entity.light(light_ety)
+                    local light = Light.of(light_ety)
                     light.color = colors[g_timeofday]
                     light:apply(light_ety)
                     -- Entity.show(light_ety)

@@ -4,6 +4,7 @@ use bevy::{prelude::*, render::{mesh::{Mesh, Indices}, render_resource::{Primiti
 use bevy_inspector_egui::Inspectable;
 use bevy_mod_scripting::lua::api::bevy::{LuaVec3, LuaWorld, LuaEntity};
 use bevy_mod_scripting::api::lua::ReflectLuaProxyable;
+use bevy_rapier3d::rapier::prelude::*;
 use mlua::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -64,12 +65,23 @@ pub enum Shape {
         w: f32,
         h: f32,
         #[serde(default = "default_quad_depth")]
-        d: f32
+        d: f32,
+        #[serde(default)]
+        one_sided: bool,
     },
 }
-pub fn default_quad_depth() -> f32 { 0.00000001 }
+pub fn default_quad_depth() -> f32 { 0.000001 }
 
 impl Shape {
+    pub fn name(&self) -> &'static str {
+        static BOX: &str = "box";
+        static QUAD: &str = "quad";
+        match self {
+            Shape::Box {..} => BOX,
+            Shape::Quad {..} => QUAD,
+        }
+    }
+
     pub fn height(&self) -> f32 {
         match self {
             Shape::Box { h, .. } => *h,
@@ -82,6 +94,53 @@ impl Shape {
         let [uv_left, uv_right, uv_top, uv_bottom] = mat.get_uvs(idx);
         match self {
             Shape::Box {w, h, d} => {
+                let extent_x = w * 0.5;
+                let extent_y = h * 0.5;
+                match mat.mode {
+                    MaterialMode::Stretch => {
+                        builder.push_indices(vec![0, 2, 1, 0, 3, 2]);
+                        let min_x = -extent_x + offset.x;
+                        let max_x =  extent_x + offset.x;
+                        let min_y = -extent_y + offset.y;
+                        let max_y =  extent_y + offset.y;
+                        let front_z = offset.z + d / 2.;
+                        builder.push([min_x, min_y, front_z], [0., 0., 1.], [uv_left,  uv_bottom]);
+                        builder.push([min_x, max_y, front_z], [0., 0., 1.], [uv_left,  uv_top]);
+                        builder.push([max_x, max_y, front_z], [0., 0., 1.], [uv_right, uv_top]);
+                        builder.push([max_x, min_y, front_z], [0., 0., 1.], [uv_right, uv_bottom]);
+                    },
+                    MaterialMode::Repeat { step, on_step } => {
+                        let y_over = (h / step) - (h / step).floor();
+                        let x_over = (w / step) - (w / step).floor();
+
+                        let y_steps = (h / step).abs().ceil() as i32;
+                        for y in 0..y_steps {
+                            let offset_y = step * y as f32 + offset.y;
+                            let min_y = -extent_y + offset_y;
+                            let max_y = (-extent_y + offset_y + step).min(extent_y + offset.y);
+                            let uv_left = if y == y_steps - 1 { y_over } else { uv_left };
+                            let x_steps = (w / step).abs().ceil() as i32;
+                            for x in 0..x_steps {
+                                let offset_x = step * x as f32 + offset.x;
+                                let i = builder.len() as u32;
+                                builder.push_indices(vec![i + 0, i + 2, i + 1, i + 0, i + 3, i + 2]);
+                                let min_x = -extent_x + offset_x;
+                                let max_x = (-extent_x + offset_x + step).min(extent_x + offset.x);
+                                let uv_bottom = if x == x_steps - 1 { 1. - x_over } else { uv_bottom };
+                                let [uv_left, uv_right, uv_top, uv_bottom] = match on_step {
+                                    RepeatType::Rotate180 if (x + y) % 2 == 0 && (y != y_steps - 1) && (x != x_steps - 1) => [uv_right, uv_left, uv_bottom, uv_top],
+                                    _ => [uv_left, uv_right, uv_top, uv_bottom],
+                                };
+                                let front_z = offset.z + d / 2.;
+                                builder.push([min_x, min_y, front_z], [0., 0., 1.], [uv_left,  uv_bottom]);
+                                builder.push([min_x, max_y, front_z], [0., 0., 1.], [uv_left,  uv_top]);
+                                builder.push([max_x, max_y, front_z], [0., 0., 1.], [uv_right, uv_top]);
+                                builder.push([max_x, min_y, front_z], [0., 0., 1.], [uv_right, uv_bottom]);
+                            }
+                        }
+                    },
+                }
+
                 // let max_x = w / 2.;
                 // let max_y = h / 2.;
                 // let max_z = d / 2.;
@@ -147,12 +206,11 @@ impl Shape {
                 // mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
                 // mesh.set_indices(Some(indices));
             },
-            Shape::Quad {w, h, d} => {
+            Shape::Quad { w, h, d, one_sided } => {
                 let extent_x = w * 0.5;
                 let extent_y = h * 0.5;
                 match mat.mode {
                     MaterialMode::Stretch => {
-                        builder.push_indices(vec![0, 2, 1, 0, 3, 2, 4, 6, 5, 4, 7, 6]);
                         let min_x = -extent_x + offset.x;
                         let max_x =  extent_x + offset.x;
                         let min_y = -extent_y + offset.y;
@@ -163,10 +221,14 @@ impl Shape {
                         builder.push([min_x, max_y, front_z], [0., 0., 1.], [uv_left,  uv_top]);
                         builder.push([max_x, max_y, front_z], [0., 0., 1.], [uv_right, uv_top]);
                         builder.push([max_x, min_y, front_z], [0., 0., 1.], [uv_right, uv_bottom]);
-                        builder.push([min_x, max_y, back_z ], [0., 0., -1.], [uv_left,  uv_top]);
-                        builder.push([min_x, min_y, back_z ], [0., 0., -1.], [uv_left,  uv_bottom]);
-                        builder.push([max_x, min_y, back_z ], [0., 0., -1.], [uv_right, uv_bottom]);
-                        builder.push([max_x, max_y, back_z ], [0., 0., -1.], [uv_right, uv_top]);
+                        builder.push_indices(vec![0, 2, 1, 0, 3, 2]);
+                        if !one_sided {
+                            builder.push([min_x, max_y, back_z ], [0., 0., -1.], [uv_left,  uv_top]);
+                            builder.push([min_x, min_y, back_z ], [0., 0., -1.], [uv_left,  uv_bottom]);
+                            builder.push([max_x, min_y, back_z ], [0., 0., -1.], [uv_right, uv_bottom]);
+                            builder.push([max_x, max_y, back_z ], [0., 0., -1.], [uv_right, uv_top]);
+                            builder.push_indices(vec![4, 6, 5, 4, 7, 6]);
+                        }
                     },
                     MaterialMode::Repeat { step, on_step } => {
                         let y_over = (h / step) - (h / step).floor();
@@ -177,18 +239,14 @@ impl Shape {
                             let offset_y = step * y as f32 + offset.y;
                             let min_y = -extent_y + offset_y;
                             let max_y = (-extent_y + offset_y + step).min(extent_y + offset.y);
-                            // let uv_right = if y == y_steps - 1 { 1. - y_over } else { uv_right };
                             let uv_left = if y == y_steps - 1 { y_over } else { uv_left };
                             let x_steps = (w / step).abs().ceil() as i32;
                             for x in 0..x_steps {
                                 let offset_x = step * x as f32 + offset.x;
                                 let i = builder.len() as u32;
-                                builder.push_indices(vec![i + 0, i + 2, i + 1, i + 0, i + 3, i + 2]);
-                                builder.push_indices(vec![i + 4, i + 6, i + 5, i + 4, i + 7, i + 6]);
                                 let min_x = -extent_x + offset_x;
                                 let max_x = (-extent_x + offset_x + step).min(extent_x + offset.x);
                                 let uv_bottom = if x == x_steps - 1 { 1. - x_over } else { uv_bottom };
-                                // let uv_top = if x == x_steps - 1 { x_over } else { uv_top };
                                 let [uv_top, uv_bottom, uv_left, uv_right] = match on_step {
                                     RepeatType::Rotate180 if (x + y) % 2 == 0 && (y != y_steps - 1) && (x != x_steps - 1) => [uv_right, uv_left, uv_bottom, uv_top],
                                     _ => [uv_left, uv_right, uv_top, uv_bottom],
@@ -199,10 +257,14 @@ impl Shape {
                                 builder.push([min_x, max_y, front_z], [0., 0., 1.], [uv_left,  uv_top]);
                                 builder.push([max_x, max_y, front_z], [0., 0., 1.], [uv_right, uv_top]);
                                 builder.push([max_x, min_y, front_z], [0., 0., 1.], [uv_right, uv_bottom]);
-                                builder.push([min_x, max_y, back_z ], [0., 0., -1.], [uv_left,  uv_top]);
-                                builder.push([min_x, min_y, back_z ], [0., 0., -1.], [uv_left,  uv_bottom]);
-                                builder.push([max_x, min_y, back_z ], [0., 0., -1.], [uv_right, uv_bottom]);
-                                builder.push([max_x, max_y, back_z ], [0., 0., -1.], [uv_right, uv_top]);
+                                builder.push_indices(vec![i + 0, i + 2, i + 1, i + 0, i + 3, i + 2]);
+                                if !one_sided {
+                                    builder.push([min_x, max_y, back_z ], [0., 0., -1.], [uv_left,  uv_top]);
+                                    builder.push([min_x, min_y, back_z ], [0., 0., -1.], [uv_left,  uv_bottom]);
+                                    builder.push([max_x, min_y, back_z ], [0., 0., -1.], [uv_right, uv_bottom]);
+                                    builder.push([max_x, max_y, back_z ], [0., 0., -1.], [uv_right, uv_top]);
+                                    builder.push_indices(vec![i + 4, i + 6, i + 5, i + 4, i + 7, i + 6]);
+                                }
                             }
                         }
                     },
@@ -211,6 +273,10 @@ impl Shape {
         }
         builder.build()
     }
+
+    // pub fn make_collider(&self) {
+    //     Collider::cuboid
+    // }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -224,6 +290,8 @@ pub struct Geometry {
     pub rotation:  Vec3,
     pub shape:     Shape,
     pub materials: Vec<String>,
+    #[serde(default)]
+    pub is_solid:  bool,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Reflect, Serialize)]
@@ -649,6 +717,11 @@ impl LuaUserData for Light {
 impl LuaMod for Light {
     fn mod_name() -> &'static str { "Light" }
     fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
+        table.set("of", lua.create_function(|ctx, entity: LuaEntity| {
+            if let Some(ent) = ctx.globals().get::<_, LuaWorld>("world").unwrap().write().get_entity(entity.inner()?) {
+                Ok(ent.get::<Light>().cloned())
+            } else { Ok(None) }
+        })?)?;
         table.set("new", lua.create_function(|_ctx, kind: LightKind| {
             Ok(Light {
                 label: None,

@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
-use bevy::{prelude::{Vec2, warn, Color, Vec3, ChildBuilder, Handle, Image, StandardMaterial, AlphaMode, PbrBundle, Assets, Visibility, Transform, AssetServer, Component, BuildChildren}, render::{mesh::{Mesh, Indices}, render_resource::PrimitiveTopology}, time::Timer, utils::default, scene::{SceneBundle, Scene}, ecs::system::EntityCommands};
+use bevy::{prelude::*, render::{mesh::{Mesh, Indices}, render_resource::PrimitiveTopology}, time::Timer, utils::{default, Uuid}, scene::{SceneBundle, Scene}, ecs::system::EntityCommands};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
-use crate::system::common::ToInit;
+use crate::{system::common::ToInit, scripting::random::random_range};
 use crate::{util::serialize::*, system::texture::{MaterialColors, Background}};
 
-use super::{geometry::*, material::*};
+use super::{geometry::Shape, material::*};
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
 pub struct AxisChange {
@@ -39,7 +39,98 @@ impl Default for ColorLayer {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct Bone {
+    /// Name of the bone; this does not need to be unique if no parts are attached to these bones (but unique children might still have attachments)
+    pub name: String,
+    /// The offset in units from the parent's summed offset
+    #[serde(default)]
+    pub offset: Vec3,
+    /// The Euler rotation of this bone from the parent's summed rotation
+    #[serde(default)]
+    pub rotation: Vec3,
+    /// The scale of attachments to this bone, which is multiplied by all the parent's scales
+    #[serde(default)]
+    pub scale: Vec3,
+    /// Whether this bone, its attachments, and its children are visible by default
+    #[serde(default = "default_is_visible")]
+    pub is_visible: bool,
+    /// The child bones
+    #[serde(default)]
+    pub children: Vec<Box<Bone>>,
+}
+fn default_is_visible() -> bool { true }
+impl Default for Bone {
+    fn default() -> Self {
+        Bone {
+            name:      "root".into(),
+            offset:     Vec3::ZERO,
+            rotation:   Vec3::ZERO,
+            scale:      Vec3::ZERO,
+            is_visible: true,
+            children:   vec![],
+        }
+    }
+}
+#[derive(Clone, Component, Debug, Default, Eq, PartialEq)]
+pub struct SkeletonRef {
+    pub uuid:     Uuid,
+    pub entities: HashMap<String, Vec<Entity>>,
+}
+impl SkeletonRef {
+    pub fn spawn(commands: &mut EntityCommands, bone: &Bone) -> Self {
+        let mut skeleton = SkeletonRef {
+            uuid: Uuid::from_u128(random_range(u128::MIN, u128::MAX)),
+            entities: HashMap::new(),
+        };
+        skeleton.add_bone(commands, bone, true);
+        skeleton
+    }
+
+    pub fn add_bone(&mut self, commands: &mut EntityCommands, bone: &Bone, is_visible: bool) {
+        commands.add_children(|parent| {
+            let mut builder = parent.spawn();
+            if let Some(v) = self.entities.get_mut(&bone.name) {
+                v.push(builder.id());
+            } else {
+                self.entities.insert(bone.name.clone(), vec![builder.id()]);
+            }
+
+            let is_visible = is_visible && bone.is_visible;
+            builder
+                .insert(Name::new(format!("{}/{}", self.uuid, bone.name)))
+                .insert_bundle(VisibilityBundle {
+                    visibility: Visibility { is_visible },
+                    ..default()
+                })
+                .insert_bundle(TransformBundle {
+                    local: Transform::from_translation(bone.offset)
+                        .with_rotation(Quat::from_euler(EulerRot::XYZ, bone.rotation.x, bone.rotation.y, bone.rotation.z)),
+                    ..default()
+                });
+            for child in bone.children.iter() {
+                self.add_bone(&mut builder, child.as_ref(), is_visible);
+            }
+        });
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct BoneAttachment {
+    /// Name of the bone this is attached to
+    pub name: String,
+    /// The offset in units from the part offset to where the bone is (for rotation, translation, etc.)
+    #[serde(default)]
+    pub offset: Vec3,
+    /// The scale of the part attached to this bone
+    #[serde(default = "default_scale")]
+    pub scale: Vec3,
+}
+pub fn default_scale() -> Vec3 { Vec3::ONE }
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct SpritePart {
+    #[serde(default)]
+    pub bone:  BoneAttachment,
     pub layer: ColorLayer,
     pub shape: Shape,
     #[serde(default)]
@@ -47,49 +138,44 @@ pub struct SpritePart {
     #[serde(default)]
     pub atlas_offset: AtlasIndex,
     #[serde(default)]
-    pub pos_offset: Vec2,
-    #[serde(default = "default_start_enabled")]
-    pub start_enabled: bool,
+    pub one_sided: bool,
 }
-fn default_start_enabled() -> bool { true }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ScenePart {
-    pub asset: String,
-    #[serde(default = "default_scene_scale")]
-    pub scale: Vec3,
     #[serde(default)]
-    pub offset: Vec3,
+    pub bone:  BoneAttachment,
+    pub asset: String,
     #[serde(default)]
     pub mat_overrides: HashMap<String, String>,
 }
-pub fn default_scene_scale() -> Vec3 { Vec3::ONE }
 #[derive(Clone, Component, Debug, PartialEq, Default)]
 pub struct SceneOverride {
     pub mat_overrides: HashMap<String, Handle<StandardMaterial>>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub enum AnimPart {
-    Sprite(SpritePart),
-    Scene(ScenePart),
+pub struct CollisionPart {
+    #[serde(default)]
+    pub bone:  BoneAttachment,
+    pub shape: Shape,
+    pub lock_axis: [bool; 3],
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct Attachment {
-    #[serde(default = "default_attachment_scale")]
-    pub scale: Vec2,
-    pub pos:   Vec3,
+pub enum AnimPart {
+    Sprite(SpritePart),
+    Scene(ScenePart),
+    Collision(CollisionPart),
 }
-fn default_attachment_scale() -> Vec2 { Vec2::ONE }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Animation {
-    pub parts:  IndexMap<String, AnimPart>,
-    pub frames: HashMap<String, Vec<Frame>>,
-    #[serde(default)]
-    pub attachments: HashMap<String, Attachment>,
+    pub parts:       IndexMap<String, AnimPart>,
+    pub frames:      HashMap<String, Vec<Frame>>,
     pub materials:   HashMap<String, TextureMaterial>,
+    #[serde(default)]
+    pub skeleton:    Bone,
 }
 
 impl Animation {
@@ -116,7 +202,8 @@ impl Animation {
 
     pub fn add_parts(
         &self,
-        commands:     &mut EntityCommands,
+        entity:       Entity,
+        commands:     &mut Commands,
         mat_colors:   &mut MaterialColors,
         asset_server: &AssetServer,
         tex_mat_info: &mut TexMatInfo,
@@ -126,64 +213,98 @@ impl Animation {
     ) -> LoadedMaterials {
         let mut by_name = HashMap::new();
         let mut layer = 0.;
-        commands.add_children(|parent| {
-            for (part_name, part) in self.parts.iter() {
-                match part {
-                    AnimPart::Sprite(part) => {
-                        let (material, texmat) = if let Some(mat_name) = part.material.as_ref() {
-                            let pair = self.get_tex(mat_name, asset_server, tex_mat_info, background, materials);
-                            by_name.insert(mat_name.clone(), pair.0.clone());
-                            pair
+        let skeleton = SkeletonRef::spawn(&mut commands.entity(entity), &self.skeleton);
+        for (part_name, part) in self.parts.iter() {
+            match part {
+                AnimPart::Sprite(part) => {
+                    let (material, texmat) = if let Some(mat_name) = part.material.as_ref() {
+                        let pair = self.get_tex(mat_name, asset_server, tex_mat_info, background, materials);
+                        by_name.insert(mat_name.clone(), pair.0.clone());
+                        pair
+                    } else {
+                        if part.layer == ColorLayer::Background {
+                            (background.material.clone(), TextureMaterial::BACKGROUND)
                         } else {
-                            if part.layer == ColorLayer::Background {
-                                (background.material.clone(), TextureMaterial::BACKGROUND)
-                            } else {
-                                warn!("No material given for Animation SpritePart {}", part_name);
-                                (materials.add(StandardMaterial {
-                                    unlit: true,
-                                    ..default()
-                                }), TextureMaterial::MISSING)
+                            warn!("No material given for Animation SpritePart {}", part_name);
+                            (materials.add(StandardMaterial {
+                                unlit: true,
+                                ..default()
+                            }), TextureMaterial::MISSING)
+                        }
+                    };
+                    
+                    mat_colors.layers.insert(material.clone_weak(), part.layer);
+        
+                    let shape = match &part.shape {
+                        Shape::Quad { w, h, d, one_sided } => Shape::Quad { w: *w, h: *h, d: d + layer, one_sided: *one_sided },
+                        s => s.clone(),
+                    };
+                    let mesh = meshes.add(shape.mk_mesh(asset_server, &texmat, part.bone.offset + (Vec3::Y * part.shape.height() / 2.), part.atlas_offset));
+        
+                    let parent = if let Some(entities) = skeleton.entities.get(&part.bone.name) {
+                        if entities.is_empty() {
+                            warn!("SpritePart {} is attached to non-existant bone {}; will be placed at entity root", part_name, part.bone.name);
+                            entity
+                        } else {
+                            if entities.len() > 1 {
+                                warn!("SpritePart {} is attached to non-unique bone {}; will be placed at first found one", part_name, part.bone.name);
                             }
-                        };
-                        
-                        mat_colors.layers.insert(material.clone_weak(), part.layer);
-            
-                        let pos = part.pos_offset.extend(0.);
-                        let shape = match &part.shape {
-                            Shape::Quad { w, h, d } => Shape::Quad { w: *w, h: *h, d: d + layer },
-                            s => s.clone(),
-                        };
-                        let mesh = meshes.add(shape.mk_mesh(asset_server, &texmat, part.pos_offset.extend(layer) + pos + (Vec3::Y * part.shape.height() / 2.), part.atlas_offset));
-            
+                            entities[0]
+                        }
+                    } else {
+                        warn!("SpritePart {} is attached to non-existant bone {}; will be placed at entity root", part_name, part.bone.name);
+                        entity
+                    };
+                    commands.entity(parent).add_children(|parent| {
                         parent.spawn().insert_bundle(PbrBundle {
                                 mesh,
-                                transform: Transform::from_translation(Vec3::Y * 0.00001),
+                                transform: Transform::from_translation(Vec3::Y * 0.00001).with_scale(part.bone.scale),
                                 material,
                                 ..default()
-                            }).insert(Visibility { is_visible: part.start_enabled });
-                        layer += 0.00001;
-                    },
-                    AnimPart::Scene(part) => {
-                        let mut mat_overrides = HashMap::new();
-    
-                        for (name, mat_name) in part.mat_overrides.iter() {
-                            let (material, _) = self.get_tex(mat_name, asset_server, tex_mat_info, background, materials);
-                            by_name.insert(mat_name.clone(), material.clone());
-                            mat_overrides.insert(name.clone(), material);
+                        });
+                    });
+                    layer += 0.00001;
+                },
+                AnimPart::Scene(part) => {
+                    let mut mat_overrides = HashMap::new();
+
+                    for (name, mat_name) in part.mat_overrides.iter() {
+                        let (material, _) = self.get_tex(mat_name, asset_server, tex_mat_info, background, materials);
+                        by_name.insert(mat_name.clone(), material.clone());
+                        mat_overrides.insert(name.clone(), material);
+                    }
+
+                    let parent = if let Some(entities) = skeleton.entities.get(&part.bone.name) {
+                        if entities.is_empty() {
+                            warn!("SpritePart {} is attached to non-existant bone {}; will be placed at entity root", part_name, part.bone.name);
+                            entity
+                        } else {
+                            if entities.len() > 1 {
+                                warn!("SpritePart {} is attached to non-unique bone {}; will be placed at first found one", part_name, part.bone.name);
+                            }
+                            entities[0]
                         }
-    
+                    } else {
+                        warn!("SpritePart {} is attached to non-existant bone {}; will be placed at entity root", part_name, part.bone.name);
+                        entity
+                    };
+                    commands.entity(parent).add_children(|parent| {
                         parent.spawn()
                             .insert_bundle(SceneBundle  {
                                 scene: asset_server.load(&part.asset),
-                                transform: Transform::from_translation(part.offset).with_scale(part.scale),
+                                transform: Transform::from_translation(part.bone.offset).with_scale(part.bone.scale),
                                 ..default()
                             }).insert(SceneOverride {
                                 mat_overrides,
                             }).insert(ToInit::<Scene>::default());
-                    },
-                }
+                    });
+                },
+                AnimPart::Collision(part) => {
+
+                },
             }
-        });
+        }
+        commands.entity(entity).insert(skeleton);
         LoadedMaterials { by_name }
     }
 }
@@ -195,16 +316,18 @@ pub struct AnimationState {
     pub animname:        String,
     pub frame_idx:       usize,
     pub time_boundaries: Vec<f32>,
+    pub flat_skeleton:   HashMap<String, Entity>,
 }
 
 impl AnimationState {
-    pub fn new(anim: &Animation, animname: &String) -> AnimationState {
+    pub fn new(anim: &Animation, animname: &String, flat_skeleton: HashMap<String, Entity>) -> AnimationState {
         let mut st = AnimationState {
             timer:           Timer::from_seconds(100., true),
             animname:        animname.clone(),
             frame_idx:       0,
             atlas_idx:       AtlasIndex::default(),
             time_boundaries: Vec::new(),
+            flat_skeleton,
         };
         st.set_anim(anim, animname);
         st

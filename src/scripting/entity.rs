@@ -1,10 +1,11 @@
+use std::collections::HashMap;
 use ::std::sync::Mutex;
 
 use bevy::{prelude::*, reflect::*};
 use bevy_mod_scripting::{prelude::*, lua::api::bevy::{LuaEntity, LuaWorld}, api::ScriptRef};
 use mlua::Lua;
 
-use crate::data::geometry::Light;
+use crate::data::{prefab::Tags};
 
 use super::{init_luamod, LuaMod};
 
@@ -19,40 +20,37 @@ impl APIProvider for EntityAPIProvider {
     fn attach_api(&mut self, ctx: &mut Self::APITarget) -> Result<(), ScriptError> {
         let ctx = ctx.get_mut().unwrap();
         attach_entity_lua(ctx).map_err(ScriptError::new_other)?;
-        init_luamod::<Query>(ctx).map_err(ScriptError::new_other)?;
+        init_luamod::<LuaQuery>(ctx).map_err(ScriptError::new_other)?;
         Ok(())
     }
 }
 
 fn attach_entity_lua(ctx: &mut Lua) -> Result<(), mlua::Error> {
     let table = ctx.create_table()?;
-    table.set("light", ctx.create_function(|ctx, entity: LuaEntity| {
-            if let Some(ent) = ctx.globals().get::<_, LuaWorld>("world").unwrap().write().get_entity(entity.inner()?) {
-                Ok(ent.get::<Light>().cloned())
-            } else { Ok(None) }
-        })?
-    )?;
     table.set("hide", ctx.create_function(|ctx, entity: LuaEntity| {
-            if let Some(mut ent_mut) = ctx.globals().get::<_, LuaWorld>("world").unwrap().write().get_entity_mut(entity.inner()?) {
-                ent_mut.insert(Visibility { is_visible: false });
-            }
-            Ok(())
-        })?
-    )?;
+        if let Some(mut ent_mut) = ctx.globals().get::<_, LuaWorld>("world").unwrap().write().get_entity_mut(entity.inner()?) {
+            ent_mut.insert(Visibility { is_visible: false });
+        }
+        Ok(())
+    })?)?;
     table.set("set_visible", ctx.create_function(|ctx, (entity, is_visible): (LuaEntity, bool)| {
-            if let Some(mut ent_mut) = ctx.globals().get::<_, LuaWorld>("world").unwrap().write().get_entity_mut(entity.inner()?) {
-                ent_mut.insert(Visibility { is_visible });
-            }
-            Ok(())
-        })?
-    )?;
+        if let Some(mut ent_mut) = ctx.globals().get::<_, LuaWorld>("world").unwrap().write().get_entity_mut(entity.inner()?) {
+            ent_mut.insert(Visibility { is_visible });
+        }
+        Ok(())
+    })?)?;
     table.set("show", ctx.create_function(|ctx, entity: LuaEntity| {
-            if let Some(mut ent_mut) = ctx.globals().get::<_, LuaWorld>("world").unwrap().write().get_entity_mut(entity.inner()?) {
-                ent_mut.insert(Visibility { is_visible: true });
-            }
-            Ok(())
-        })?
-    )?;
+        if let Some(mut ent_mut) = ctx.globals().get::<_, LuaWorld>("world").unwrap().write().get_entity_mut(entity.inner()?) {
+            ent_mut.insert(Visibility { is_visible: true });
+        }
+        Ok(())
+    })?)?;
+    table.set("tags", ctx.create_function(|ctx, entity: LuaEntity| {
+        if let Some(ent) = ctx.globals().get::<_, LuaWorld>("world").unwrap().write().get_entity(entity.inner()?) {
+            let v: Option<HashMap<String, bool>> = ent.get::<Tags>().map(|t| t.0.iter().map(|s| (s.clone(), true)).collect());
+            Ok(v)
+        } else { Ok(None) }
+    })?)?;
     ctx.globals().set("Entity", table)?;
     Ok(())
 }
@@ -62,13 +60,13 @@ fn attach_entity_lua(ctx: &mut Lua) -> Result<(), mlua::Error> {
 /* ******* */
 
 #[derive(Clone)]
-pub struct Query {
+pub struct LuaQuery {
     name:    Option<String>,
     with:    Vec<String>,
     without: Vec<String>,
 }
-impl Query {
-    fn get_type_registries<F>(&self, field: F, world: &LuaWorld) -> Result<Vec<TypeRegistration>, LuaError> where F: Fn(&Query) -> &Vec<String> {
+impl LuaQuery {
+    fn get_type_registries<F>(&self, field: F, world: &LuaWorld) -> Result<Vec<TypeRegistration>, LuaError> where F: Fn(&LuaQuery) -> &Vec<String> {
         let w = world.read();
         let registry = w.get_resource::<TypeRegistry>().unwrap().read();
         let mut types = Vec::new();
@@ -85,7 +83,7 @@ impl Query {
     }
 }
 
-impl LuaUserData for Query {
+impl LuaUserData for LuaQuery {
     fn add_fields<'lua, F: mlua::UserDataFields<'lua, Self>>(_: &mut F) {
     }
 
@@ -133,87 +131,30 @@ impl LuaUserData for Query {
             }
             Ok(entities)
         });
-        // methods.add_method("select", |ctx, this, world: LuaWorld| {
-        //     let with_types    = this.get_type_registries(|q| &q.with,    &world)?;
-        //     let without_types = this.get_type_registries(|q| &q.without, &world)?;
-
-        //     let mut entities = Vec::new();
-        //     let mut w = world.write();
-        //     for entity in w.query::<Entity>().iter(&*w) {
-        //         let entity: Entity = entity;
-        //         let mut matches = true;
-        //         if let Some(name) = &this.name {
-        //             matches = if let Some(entity_name) = w.get_entity(entity).and_then(|e| e.get::<Name>()) {
-        //                 entity_name.as_str() == name.as_str()
-        //             } else { false }
-        //         }
-        //         if matches {
-        //             for comp_type in &without_types {
-        //                 let component_data = comp_type.data::<ReflectComponent>().ok_or_else(|| {
-        //                     LuaError::RuntimeError(format!("Type {} doesn't exist or wasn't registered", comp_type.short_name()))
-        //                 })?;
-        
-        //                 if component_data.reflect(&w, entity).is_some() {
-        //                     matches = false;
-        //                     break;
-        //                 }
-        //             }
-        //         }
-        //         if matches {
-        //             for comp_type in &with_types {
-        //                 let component_data = comp_type.data::<ReflectComponent>().ok_or_else(|| {
-        //                     LuaError::RuntimeError(format!("Type {} doesn't exist or wasn't registered", comp_type.short_name()))
-        //                 })?;
-        
-        //                 if component_data.reflect(&w, entity).is_none() {
-        //                     matches = false;
-        //                     break;
-        //                 }
-        //             }
-        //         }
-        //         if matches {
-        //             let table = ctx.create_table()?;
-        //             table.set("entity", LuaEntity::new(entity))?;
-        //             for comp_type in &with_types {
-        //                 let component_data = comp_type.data::<ReflectComponent>().ok_or_else(|| {
-        //                     LuaError::RuntimeError(format!("Type {} doesn't exist or wasn't registered", comp_type.short_name()))
-        //                 })?;
-        //                 let scriptref = ScriptRef::new_component_ref(
-        //                     component_data.clone(),
-        //                     entity,
-        //                     world.as_ref().clone(),
-        //                 );
-        //                 table.set(comp_type.short_name().to_lowercase(), 5)?;
-        //             }
-        //             entities.push(table);
-        //         }
-        //     }
-        //     Ok(entities)
-        // });
-        methods.add_method("with", |_ctx, this, typename: String| {
-            let mut nq = this.clone();
-            nq.with.push(typename);
-            Ok(nq)
+        methods.add_function_mut("with", |_, (this, typename): (LuaAnyUserData, String)| {
+            let mut this: LuaQuery = this.take()?;
+            this.with.push(typename);
+            Ok(this)
         });
-        methods.add_method("without", |_ctx, this, typename: String| {
-            let mut nq = this.clone();
-            nq.without.push(typename);
-            Ok(nq)
+        methods.add_function_mut("without", |_, (this, typename): (LuaAnyUserData, String)| {
+            let mut this: LuaQuery = this.take()?;
+            this.without.push(typename);
+            Ok(this)
         });
     }
 }
-impl LuaMod for Query {
+impl LuaMod for LuaQuery {
     fn mod_name() -> &'static str { "Query" }
     fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
         table.set("named", lua.create_function(|_ctx, name| {
-            Ok(Query {
+            Ok(LuaQuery {
                 name:    Some(name),
                 with:    Vec::new(),
                 without: Vec::new(),
             })
         })?)?;
         table.set("new", lua.create_function(|_ctx, ()| {
-            Ok(Query {
+            Ok(LuaQuery {
                 name:    None,
                 with:    Vec::new(),
                 without: Vec::new(),

@@ -1,4 +1,5 @@
 pub mod anim;
+pub mod formlist;
 pub mod geometry;
 pub mod grid;
 pub mod input;
@@ -8,4 +9,5 @@ pub mod lang;
 pub mod material;
 pub mod palette;
 pub mod prefab;
+pub mod setting;
 pub mod stat;

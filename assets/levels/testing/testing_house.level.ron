@@ -72,9 +72,10 @@ Level(
                     label:     "floor",                    // label, optional, scripts can get this geometry from this
                     pos:       (0., 0., 0.),               // where the center of the object is
                     // shape:     Box(w: 12., h: 1., d: 12.), // what shape/porportions the geometry has
-                    shape:     Quad(w: 7., h: 11.), // what shape/porportions the geometry has
+                    shape:     Quad(w: 7., h: 11.),        // what shape/porportions the geometry has
                     rotation:  (-1.57079632679, 0., 0.),
                     materials: ["background", "floor"],    // what materials are drawn in order; in this case, we fill the shape with the background color, and then draw the floor material over it
+                    is_solid:  true,                       // should collision get generated for me? (defaults to false)
                 ),
                 (
                     pos:       (-3.5, 0.35, 0.),

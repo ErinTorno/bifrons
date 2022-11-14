@@ -48,7 +48,6 @@ pub struct MessageBuilder {
 impl LuaUserData for MessageBuilder {
     fn add_fields<'lua, F: mlua::UserDataFields<'lua, Self>>(fields: &mut F) {
         fields.add_field_method_get("hook_name",   |_, this| Ok(this.hook_name.clone()));
-        fields.add_field_method_set("hook_name",   |_, this, hook_name| Ok(this.hook_name = hook_name));
     }
 
     fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {

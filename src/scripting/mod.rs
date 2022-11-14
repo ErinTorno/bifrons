@@ -1,4 +1,4 @@
-use std::{sync::Mutex, collections::{HashMap, HashSet}, hash::Hash};
+use std::{sync::Mutex, collections::{HashMap, HashSet}, hash::Hash, path::Path};
 use ::std::time::Duration;
 
 use bevy::{prelude::*};
@@ -7,10 +7,10 @@ use bevy_mod_scripting::{prelude::*, core::{event::ScriptLoaded}, lua::api::bevy
 use iyes_loopless::prelude::FixedTimestepStage;
 use serde::{Deserialize, Serialize};
 
-use crate::data::{stat::{Stat, Pool}, material::TextureMaterial};
+use crate::{data::{stat::{Stat, Pool}, material::{TextureMaterial, TexMatInfo}, input::ActionState, formlist::{FormList, InjectCommands}, level::Level}, system::editor::AssetInfo};
 use crate::util::serialize::*;
 
-use self::{event::{ON_UPDATE, ON_INIT}, color::RgbaColor, time::LuaTime, message::MessageQueue};
+use self::{event::{ON_UPDATE, ON_INIT}, color::RgbaColor, time::LuaTime, message::MessageQueue, registry::Registry};
 
 pub mod color;
 pub mod entity;
@@ -20,6 +20,7 @@ pub mod level;
 pub mod log;
 pub mod message;
 pub mod random;
+pub mod registry;
 pub mod time;
 
 #[derive(Clone, Debug, Default)]
@@ -36,6 +37,7 @@ impl Plugin for ScriptPlugin {
             .register_inspectable::<LuaScriptVars>()
             .init_resource::<LuaTime>()
             .init_resource::<MessageQueue>()
+            .init_resource::<Registry>()
             .init_resource::<ScriptsInfo>()
             .add_stage_before(
                 CoreStage::Update,
@@ -58,6 +60,19 @@ impl Plugin for ScriptPlugin {
             .add_system(update_script_queue)
             ;
     }
+}
+
+pub fn register_lua_mods(lua: &Lua) -> Result<(), LuaError> {
+    init_luamod::<ActionState>(lua)?;
+    init_luamod::<AssetInfo>(lua)?;
+    init_luamod::<FormList>(lua)?;
+    init_luamod::<InjectCommands>(lua)?;
+    init_luamod::<Registry>(lua)?;
+    init_luamod::<ScriptVar>(lua)?;
+    init_luamod::<TextureMaterial>(lua)?;
+    init_luamod::<Pool>(lua)?;
+    init_luamod::<Stat>(lua)?;
+    Ok(())
 }
 
 pub trait LuaMod {
@@ -147,10 +162,7 @@ impl APIProvider for PreludeAPIProvider {
     fn attach_api(&mut self, ctx: &mut Self::APITarget) -> Result<(), ScriptError> {
         let ctx = ctx.get_mut().unwrap();
         attach_prelude_lua(ctx).map_err(ScriptError::new_other)?;
-        init_luamod::<ScriptVar>(ctx).map_err(ScriptError::new_other)?;
-        init_luamod::<TextureMaterial>(ctx).map_err(ScriptError::new_other)?;
-        init_luamod::<Pool>(ctx).map_err(ScriptError::new_other)?;
-        init_luamod::<Stat>(ctx).map_err(ScriptError::new_other)?;
+        register_lua_mods(ctx).map_err(ScriptError::new_other)?;
         Ok(())
     }
 }
@@ -234,6 +246,104 @@ pub fn format_lua(values: LuaMultiValue) -> Result<String, LuaError> {
     Ok(s)
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AssetKind {
+    FormList,
+    Level,
+    Material,
+}
+
+#[derive(Clone, Debug)]
+pub struct LuaHandle {
+    pub handle: HandleUntyped,
+    pub kind:   AssetKind,
+}
+impl LuaHandle {
+    pub fn get_path(&self, asset_server: &AssetServer) -> Option<String> {
+        match self.kind {
+            AssetKind::FormList => asset_server.get_handle_path(self.handle.typed_weak::<FormList>()),
+            AssetKind::Level    => asset_server.get_handle_path(self.handle.typed_weak::<Level>()),
+            AssetKind::Material => asset_server.get_handle_path(self.handle.typed_weak::<StandardMaterial>()),
+        }.map(|p| p.path().to_string_lossy().to_string())
+    }
+}
+impl From<Handle<FormList>> for LuaHandle {
+    fn from(handle: Handle<FormList>) -> Self {
+        LuaHandle { handle: handle.clone_weak_untyped(), kind: AssetKind::FormList }
+    }
+}
+impl From<Handle<Level>> for LuaHandle {
+    fn from(handle: Handle<Level>) -> Self {
+        LuaHandle { handle: handle.clone_weak_untyped(), kind: AssetKind::Level }
+    }
+}
+impl From<Handle<StandardMaterial>> for LuaHandle {
+    fn from(handle: Handle<StandardMaterial>) -> Self {
+        LuaHandle { handle: handle.clone_weak_untyped(), kind: AssetKind::Material }
+    }
+}
+impl LuaUserData for LuaHandle {
+    fn add_fields<'lua, F: mlua::UserDataFields<'lua, Self>>(fields: &mut F) {
+        fields.add_field_method_get("kind", |_, this| Ok(match this.kind {
+            AssetKind::FormList => "formlist",
+            AssetKind::Level => "level",
+            AssetKind::Material => "material",
+        }));
+    }
+
+    fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(format!("#handle<{:?}>{{id = {:?}}}", this.kind, this.handle.id)));
+        methods.add_method("get", |lua: &Lua, this: &LuaHandle, ()| {
+            match this.kind {
+                AssetKind::FormList => {
+                    let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
+                    let w = world.read();
+                    let assets = w.get_resource::<Assets<FormList>>().unwrap();
+                    if let Some(asset) = assets.get(&this.handle.clone().typed()) {
+                        Ok(Some(asset.clone().to_lua(lua)?))
+                    } else { Ok(None) }
+                },
+                AssetKind::Level => Err(LuaError::RuntimeError("Cannot load Level assets into Lua; see the Level module".to_string())),
+                AssetKind::Material => {
+                    let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
+                    let w = world.read();
+                    if let Some(tex_mat_info) = w.get_resource::<TexMatInfo>() {
+                        if let Some(texmat) = tex_mat_info.materials.get(&this.handle.clone().typed()) {
+                            Ok(Some(texmat.clone().to_lua(lua)?))
+                        } else { Ok(None) }
+                    } else {
+                        Err(LuaError::RuntimeError(format!("TexMatInfo not found")))
+                    }
+                },
+            }
+        });
+        methods.add_method("is_loaded", |lua, this, ()| {
+            let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
+            let w = world.read();
+            match this.kind {
+                AssetKind::FormList => {
+                    let assets = w.get_resource::<Assets<FormList>>().unwrap();
+                    Ok(assets.contains(&this.handle.clone().typed()))
+                },
+                AssetKind::Level => {
+                    let assets = w.get_resource::<Assets<Level>>().unwrap();
+                    Ok(assets.contains(&this.handle.clone().typed()))
+                },
+                AssetKind::Material => {
+                    let assets = w.get_resource::<Assets<StandardMaterial>>().unwrap();
+                    Ok(assets.contains(&this.handle.clone().typed()))
+                },
+            }
+        });
+        methods.add_method("path", |lua, this, ()| {
+            let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
+            let w = world.read();
+            let asset_server = w.get_resource::<AssetServer>().unwrap();
+            Ok(this.get_path(asset_server))
+        });
+    }
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Inspectable, PartialEq, Reflect, Serialize)]
 pub enum ScriptVar {
     AnyUserTable(Vec<(ScriptVar, ScriptVar)>),
@@ -294,11 +404,18 @@ impl<'lua> FromLua<'lua> for ScriptVar {
                 Ok(ScriptVar::AnyUserTable(pairs))
             },
             LuaValue::UserData(data) => {
-                if data.is::<LuaVec2>() {
+                if data.is::<LuaEntity>() {
+                    Ok(ScriptVar::Entity(data.borrow::<LuaEntity>()?.clone().inner()?.to_bits()))
+                }else if data.is::<LuaVec2>() {
                     Ok(ScriptVar::Vec2(data.borrow::<LuaVec2>()?.clone().inner()?))
+                } else if data.is::<LuaVec3>() {
+                    Ok(ScriptVar::Vec3(data.borrow::<LuaVec3>()?.clone().inner()?))
+                } else if data.is::<LuaQuat>() {
+                    Ok(ScriptVar::Quat(data.borrow::<LuaQuat>()?.clone().inner()?))
+                } else if data.is::<RgbaColor>() {
+                    Ok(ScriptVar::Color(data.borrow::<RgbaColor>()?.clone().into()))
                 } else {
                     let meta = data.get_metatable()?;
-                    
                     if let Some(function) = meta.get::<_, Option<LuaFunction>>(LuaMetaMethod::Custom("__script_var".into()))? {
                         function.call(LuaValue::UserData(data))
                     } else {

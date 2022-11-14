@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use bevy_inspector_egui::Inspectable;
 use serde::*;
 
-use crate::data::input::{ActionState, InputMap};
+use crate::data::input::{ActionState, InputMap, InputTS, InputData};
 
 use super::common::ToInit;
 
@@ -17,7 +17,6 @@ impl Plugin for CameraPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         app
             .register_type::<Focus>()
-            .register_type::<Follow>()
             .add_system(setup_camera)
             .add_system(cam_movement)
             // .add_system(follow_system)
@@ -60,7 +59,7 @@ pub fn setup_camera(
         let transform = cam.controller.and_then(|e| actor_query.get(e).ok())
             .or(transform)
             .map(|t| {
-                t.clone().with_translation(Vec3::new(5., 5., 5.)).looking_at(t.translation, Vec3::Y)
+                t.clone().with_translation(Vec3::new(5., 5., 5.)).looking_at(Vec3::new(5., 5., 4.), Vec3::Y)
             });
         
         commands.entity(entity)
@@ -74,64 +73,49 @@ pub fn setup_camera(
 
 pub fn cam_movement(
     time: Res<Time>,
+    windows: Res<Windows>,
     mut cam_query: Query<(&mut Transform, &ActiveCamera), With<Camera3d>>,
-    actor_query: Query<(&Transform, &ActionState, &InputMap), Without<Camera3d>>,
+    mut actor_query: Query<(&Transform, &mut ActionState, &InputMap), Without<Camera3d>>,
 ) {
+    let window = windows.get_primary().unwrap();
+    let window_size = Vec2::new(window.width() as f32, window.height() as f32);
+    let elapsed_secs = time.seconds_since_startup();
     for (mut transform, camera) in cam_query.iter_mut() {
         if let Some(entity) = camera.controller {
-            if let Some((a_trans, a_state, a_inputmap)) = actor_query.get(entity).ok() {
+            if let Some((a_trans, mut a_state, a_inputmap)) = actor_query.get_mut(entity).ok() {
                 let mut x_speed = 0.;
                 let mut y_speed = 0.;
                 let mut rz_speed = 0.;
                 let mut az_speed = 0.;
-                rz_speed -= time.delta_seconds() * a_inputmap.zoom_speed * a_state.input_ts("zoom_in").power();
-                rz_speed -= time.delta_seconds() * a_inputmap.zoom_speed * a_state.input_ts("zoom_out").power();
-                az_speed -= time.delta_seconds() * a_inputmap.zoom_speed * a_state.input_ts("forward").power();
-                az_speed += time.delta_seconds() * a_inputmap.zoom_speed * a_state.input_ts("back").power();
-                x_speed -= time.delta_seconds() * a_inputmap.cam_speed  * a_state.input_ts("left").power();
-                x_speed += time.delta_seconds() * a_inputmap.cam_speed  * a_state.input_ts("right").power();
-                y_speed += time.delta_seconds() * a_inputmap.cam_speed  * a_state.input_ts("rise").power();
-                y_speed -= time.delta_seconds() * a_inputmap.cam_speed  * a_state.input_ts("fall").power();
-                let translation = transform.rotation * Vec3::new(x_speed, 0., rz_speed);
-                let translation = translation + Quat::from_rotation_y(transform.rotation.y) * (Vec3::Z * az_speed);
-                transform.translation += translation + Vec3::Y * y_speed;
-                // let rotation = transform.rotation.clone();
+                let m = time.delta_seconds() * if a_state.input_ts("run").is_blank() { 1. } else { 1.5 };
+                rz_speed -= time.delta_seconds() * a_inputmap.zoom_speed * a_state.input_ts("zoom_in").time_scaled_power();
+                rz_speed += time.delta_seconds() * a_inputmap.zoom_speed * a_state.input_ts("zoom_out").time_scaled_power();
+                az_speed += m * a_inputmap.cam_speed * a_state.input_ts("forward").time_scaled_power();
+                az_speed -= m * a_inputmap.cam_speed * a_state.input_ts("back").time_scaled_power();
+                x_speed  -= m * a_inputmap.cam_speed * a_state.input_ts("left").time_scaled_power();
+                x_speed  += m * a_inputmap.cam_speed * a_state.input_ts("right").time_scaled_power();
+                y_speed  -= m * a_inputmap.cam_speed * a_state.input_ts("fall").time_scaled_power();
+                y_speed  += m * a_inputmap.cam_speed * a_state.input_ts("rise").time_scaled_power();
+
+                if let Some(InputTS { data: InputData::VecChain { vecs },.. }) = a_state.inputs.remove("cam_drag") {
+                    let v = vecs.iter().map(|ts| ts.value).fold(Vec2::ZERO, |a, b| a + b);
+                    let delta_x = v.x / window_size.x * std::f32::consts::PI * 2.0;
+                    let delta_y = v.y / window_size.y * std::f32::consts::PI;
+                    let yaw = Quat::from_rotation_y(-delta_x);
+                    let pitch = Quat::from_rotation_x(-delta_y);
+                    transform.rotation = yaw * transform.rotation;
+                    transform.rotation = transform.rotation * pitch;
+                    transform.rotation = yaw * transform.rotation;
+                    transform.rotation = transform.rotation * pitch;
+                }
                 
-                // if a_state.input_ts(s)
+                let translation = transform.rotation * Vec3::new(x_speed, 0., rz_speed);
+                let target = transform.rotation * Vec3::Z;
+                let target = transform.translation + Vec3::new(target.x, 0., target.z);
+                let translation = translation + transform.clone().looking_at(target, Vec3::Y).rotation * (Vec3::Z * az_speed);
+                // let translation = translation + Quat::from_rotation_y(transform.rotation.y) * (Vec3::Z * az_speed);
+                transform.translation += translation + Vec3::Y * y_speed;
             }
         }
     }
 }
-
-#[derive(Clone, Component, Debug, Deserialize, PartialEq, Reflect, Serialize)]
-pub struct Follow {
-    pub target: Entity,
-    #[serde(default)]
-    pub lock_x: bool,
-    #[serde(default)]
-    pub lock_y: bool,
-    #[serde(default)]
-    pub lock_z: bool,
-}
-impl Follow {
-    pub fn targetting(target: Entity) -> Self {
-        Follow {
-            target,
-            lock_x: false,
-            lock_y: false,
-            lock_z: false,
-        }
-    }
-}
-
-// pub fn follow_system(
-//     world: &World,
-//     mut query: Query<(&mut Transform, &Follow)>,
-// ) {
-//     for (mut transform, follow) in query.iter_mut() {
-//         if let Some(target) = world.get::<Transform>(follow.target) {
-
-//             transform.look_at(target.translation, Vec3::Y);
-//         }
-//     }
-// }

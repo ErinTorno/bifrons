@@ -5,21 +5,32 @@ Prefab(
     scripts: ["items/lantern.lua"],
     lines: {
         "english": {
-            "name": "Lantern",
+            "name":          "Lantern",
+            "light":         "Light {name}",
+            "extinguish":    "Extinguish {name}",
+            "ignite":        "Ignite {target}",
+            "throw":         "Throw {name}",
+            "throw_tooltip": "This will break the {name}!",
         },
     },
     tags: ["fire", "lightsource", "metal", "weapon"],
     item: (
-        equip_slots: ["hand_left", "hand_right"],
+        equip_slots: ["hand"],
     ),
     animation: (
         frames: {
             "idle": [],
         },
+        skeleton: (
+            name: "root",
+            children: [
+                (name: "flame", offset: (0., 0.4238, 0.)),
+            ],
+        ),
         parts: {
-            "fire": Sprite(layer: Outline,    shape: Quad(w: 0.308, h: 0.52), material: "fire", atlas_offset: (row: 0, col: 2)),
-            "bkg":  Sprite(layer: Background, shape: Quad(w: 0.308, h: 0.52), material: "bkg",  atlas_offset: (row: 0, col: 1)),
-            "out":  Sprite(layer: Outline,    shape: Quad(w: 0.308, h: 0.52), material: "out"),
+            "fire": Sprite(bone: (name: "root"), layer: Outline,    shape: Quad(w: 0.308, h: 0.52), material: "fire", atlas_offset: (row: 0, col: 2)),
+            "bkg":  Sprite(bone: (name: "root"), layer: Background, shape: Quad(w: 0.308, h: 0.52), material: "bkg",  atlas_offset: (row: 0, col: 1)),
+            "out":  Sprite(bone: (name: "root"), layer: Outline,    shape: Quad(w: 0.308, h: 0.52), material: "out"),
         },
         materials: {
             "out": (

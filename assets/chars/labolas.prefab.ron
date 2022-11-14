@@ -8,11 +8,6 @@
         },
     },
     animation: (
-        attachments: {
-            "head":       ( pos: (0.,   1.30, 0.) ),
-            "hand_left":  ( pos: (0.72, 0.52, 0.) ),
-            "hand_right": ( pos: (0.22, 0.52, 0.) ),
-        },
         frames: {
             "idle": [
                 (delay: 0.2, atlas: (row: 0, col: 0)),
@@ -23,9 +18,17 @@
                 (delay: 0.2, atlas: (row: 0, col: 5), scale: (x: 1.006, y: 1.011)),
             ],
         },
+        skeleton: (
+            name: "root",
+            children: [
+                (name: "head",       offset: (0.,   1.30, 0.)),
+                (name: "hand_left",  offset: (0.72, 0.52, 0.)),
+                (name: "hand_right", offset: (0.22, 0.52, 0.)),
+            ],
+        ),
         parts: {
-            "bkg": Sprite(layer: Background, shape: Quad(w: 0.771, h: 1.3), material: "bkg", atlas_offset: (row: 1, col: 0)),
-            "out": Sprite(layer: Outline,    shape: Quad(w: 0.771, h: 1.3), material: "out"),
+            "bkg": Sprite(bone: (name: "root"), layer: Background, shape: Quad(w: 0.771, h: 1.3), material: "bkg", atlas_offset: (row: 1, col: 0)),
+            "out": Sprite(bone: (name: "root"), layer: Outline,    shape: Quad(w: 0.771, h: 1.3), material: "out"),
         },
         materials: {
             // implicit "background" material that is a fill of the current background

@@ -19,8 +19,6 @@ impl APIProvider for ColorAPIProvider {
     fn attach_api(&mut self, ctx: &mut Self::APITarget) -> Result<(), ScriptError> {
         let ctx = ctx.get_mut().unwrap();
         init_luamod::<RgbaColor>(ctx).map_err(ScriptError::new_other)?;
-
-        info!("finished attaching ColorAPIProvider");
         Ok(())
     }
 }

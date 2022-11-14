@@ -15,12 +15,12 @@ function set_lit(is_lit)
     g_islit = is_lit
     if is_lit then
         local handles = Material.handle_table(entity)
-        local outline = handles.out:config()
+        local outline = handles.out:get()
         outline.color = g_vars.lantern_color or Color.hex("#e09b4d")
         outline.emissive_color = g_vars.lantern_emissive or Color.hex("#a17d37")
         outline:apply(handles.out)
 
-        local fire = handles.fire:config()
+        local fire = handles.fire:get()
         local fire_color = g_vars.lantern_color or Color.hex("#e09b4d")
         fire_color.a        = 0.75
         fire.color          = fire_color
@@ -36,12 +36,12 @@ function set_lit(is_lit)
         end
 
         local handles = Material.handle_table(entity)
-        local outline = handles.out:config()
+        local outline = handles.out:get()
         outline.color          = g_vars.lantern_frame_color or Color.hex("#4b4158")
         outline.emissive_color = Color.black
         outline:apply(handles.out)
 
-        local fire = handles.fire:config()
+        local fire = handles.fire:get()
         fire.color          = Color.clear
         fire.emissive_color = Color.clear
         fire:apply(handles.fire)
@@ -72,9 +72,11 @@ end
 function on_use(ctx)
     local target = ctx.target
     local tags = Entity.tags(target)
-    if tags["monster"] then
-        -- todo burn attack if close
-    else
+    if tags.monster then
+        Prompt.new("throw", function()
+            Log.info("todo")
+        end):enabled(g_islit):add_to(ctx.prompts)
+    elseif tags.flammable then
         Prompt.new("ignite", function()
             Log.info("todo")
         end):enabled(g_islit):add_to(ctx.prompts)
