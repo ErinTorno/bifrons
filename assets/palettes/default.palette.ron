@@ -1,0 +1,35 @@
+#![enable(implicit_some)]
+#![enable(unwrap_newtypes)]
+#![enable(unwrap_variant_newtypes)]
+(
+    colors: {
+        // Inspired and expanded from TY Murder Mystery 16 Palette https://lospec.com/palette-list/ty-murder-mystery-16
+        "black":      "#1c1a23",
+        "blue":       "cornflower",
+        "brown":      "#615344",
+        "clay":       "#8d3e29",
+        "coffee":     "#503528",
+        "cream":      "#deceb4",
+        "cornflower": "#8490d5",
+        "cyan":       "icy",
+        "gold":       "#a7823a",
+        "green":      "#4b6a2a",
+        "grey":       "#808078",
+        "icy":        "#99b2bc",
+        "lavender":   "#c788dd",
+        "lime":       "#9fcb5b",
+        "magenta":    "#954762",
+        "olive":      "#708f3f",
+        "orange":     "#f77d42",
+        "pink":       "rose",
+        "purple":     "#8f57a3",
+        "red":        "#a54545",
+        "rose":       "#de4e76",
+        "sand":       "#c3956e",
+        "sierra":     "#e09b4d",
+        "teal":       "#31525c",
+        "white":      "cream",
+        "wine":       "#50405a",
+        "yellow":     "#d5cb57",
+    },
+)

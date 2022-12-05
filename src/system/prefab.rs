@@ -1,4 +1,4 @@
-use bevy::{prelude::*};
+use bevy::{prelude::*, asset::LoadState};
 use bevy_inspector_egui::{Inspectable, RegisterInspectable};
 use bevy_mod_scripting::prelude::{ScriptCollection, LuaFile, Script};
 use crate::{system::common::ToInit, data::{prefab::*, input::{ActionState, InputMap}, material::{TexMatInfo, LoadedMaterials}, stat::Attributes}, scripting::LuaScriptVars, util::pair_clone};
@@ -93,6 +93,15 @@ pub fn spawn_prefab(
                         controller: Some(entity),
                         focus: Focus::Entity { which: entity, offset: Vec3::ZERO }
                     });
+            }
+        } else {
+            match asset_server.get_load_state(handle) {
+                LoadState::Failed => {
+                    let path = asset_server.get_handle_path(handle);
+                    error!("Prefab asset failed for {:?} {:?}", entity, path);
+                    commands.entity(entity).remove::<ToInitHandle<Prefab>>();
+                },
+                _ => (),
             }
         }
     }

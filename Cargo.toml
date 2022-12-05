@@ -7,10 +7,10 @@ license-file = "agpl-3.0.txt"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bevy = { version = "0.8.1", default-features = false, features = ["animation", "bevy_asset", "bevy_gilrs", "bevy_gltf", "bevy_scene", "bevy_winit", "render", "png", "serialize", "x11"] }
+bevy = { version = "0.8.1", default-features = false, features = ["animation", "basis-universal", "bevy_asset", "bevy_gilrs", "bevy_gltf", "bevy_scene", "bevy_winit", "ktx2", "render", "png", "serialize", "x11", "zlib", "zstd"] }
 bevy_egui = "0.16.1"
 bevy-inspector-egui = "0.13.0"
-bevy_kira_audio = { version = "0.12.0", features = ["flac", "mp3", "ogg", "wav"] }
+bevy_kira_audio = { version = "0.12.0", features = ["flac", "ogg"] }
 bevy_mod_scripting = { path = "crates/bevy_mod_scripting", features = ["lua", "lua_script_api"] } # { git = "https://github.com/makspll/bevy_mod_scripting.git", rev = "781754a7e43730885e58fa89b1f911ae800bf985", features = ["lua", "lua_script_api"] }
 bytemuck = "1.12.1"
 byteorder = "1.4.3"
@@ -30,3 +30,4 @@ serde_json = "1.0.87"
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 bevy_rapier3d = "0.18.0"
+lazy_static = "1.4.0"

@@ -33,6 +33,7 @@ fn main() {
         .add_plugin(system::anim::AnimPlugin)
         .add_plugin(system::camera::CameraPlugin)
         .add_plugin(system::level::LevelPlugin)
+        .add_plugin(system::palette::PalettePlugin)
         .add_plugin(system::prefab::PrefabPlugin)
         .add_plugin(system::scene::ScenePlugin)
         .add_plugin(system::texture::TexturePlugin)

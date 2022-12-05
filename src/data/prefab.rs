@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use bevy::{asset::*, prelude::*, reflect::TypeUuid, utils::HashSet};
 use serde::{Deserialize, Serialize};
 
@@ -18,7 +20,7 @@ pub struct Prefab {
     #[serde(default)]
     pub tags:        HashSet<String>,
     #[serde(default)]
-    pub lines:       Lines,
+    pub lines:       HashMap<String, Lines>,
     pub animation:   Animation,
     #[serde(default)]
     pub attributes:  Option<Attributes>,
@@ -38,6 +40,7 @@ impl AssetLoader for PrefabLoader {
         Box::pin(async move {
             let prefab: Prefab = ron::de::from_bytes(bytes)?;
             load_context.set_default_asset(LoadedAsset::new(prefab));
+            info!("{} Prefab asset finished loading", load_context.path().to_string_lossy());
             Ok(())
         })
     }

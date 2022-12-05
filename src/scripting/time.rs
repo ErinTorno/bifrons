@@ -52,3 +52,17 @@ impl LuaMod for LuaTime {
         Ok(())
     }
 }
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Inspectable, PartialEq, Serialize)]
+pub struct LuaTimer {
+    #[serde(default)]
+    pub start:    f64,
+    pub duration: f64,
+    pub repeat:   bool,
+}
+impl LuaMod for LuaTimer {
+    fn mod_name() -> &'static str { "Timer" }
+    fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
+        Ok(())
+    }
+}

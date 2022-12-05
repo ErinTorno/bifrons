@@ -7,7 +7,7 @@ use bevy_mod_scripting::{prelude::*, core::{event::ScriptLoaded}, lua::api::bevy
 use iyes_loopless::prelude::FixedTimestepStage;
 use serde::{Deserialize, Serialize};
 
-use crate::{data::{stat::{Stat, Pool}, material::{TextureMaterial, TexMatInfo}, input::ActionState, formlist::{FormList, InjectCommands}, level::Level, geometry::{Light, LightAnim, LightKind}}};
+use crate::{data::{stat::{Stat, Pool}, material::{TextureMaterial, TexMatInfo}, input::ActionState, formlist::{FormList, InjectCommands}, level::Level, geometry::{Light, LightAnim, LightKind}, palette::Palette}};
 use crate::util::serialize::*;
 
 use self::{event::{ON_UPDATE, ON_INIT}, color::RgbaColor, time::LuaTime, message::MessageQueue, registry::Registry};
@@ -252,6 +252,7 @@ pub enum AssetKind {
     FormList,
     Level,
     Material,
+    Palette,
 }
 
 #[derive(Clone, Debug)]
@@ -265,6 +266,7 @@ impl LuaHandle {
             AssetKind::FormList => asset_server.get_handle_path(self.handle.typed_weak::<FormList>()),
             AssetKind::Level    => asset_server.get_handle_path(self.handle.typed_weak::<Level>()),
             AssetKind::Material => asset_server.get_handle_path(self.handle.typed_weak::<StandardMaterial>()),
+            AssetKind::Palette  => asset_server.get_handle_path(self.handle.typed_weak::<Palette>()),
         }.map(|p| p.path().to_string_lossy().to_string())
     }
 }
@@ -283,22 +285,28 @@ impl From<Handle<StandardMaterial>> for LuaHandle {
         LuaHandle { handle: handle.clone_weak_untyped(), kind: AssetKind::Material }
     }
 }
+impl From<Handle<Palette>> for LuaHandle {
+    fn from(handle: Handle<Palette>) -> Self {
+        LuaHandle { handle: handle.clone_weak_untyped(), kind: AssetKind::Palette }
+    }
+}
 impl LuaUserData for LuaHandle {
     fn add_fields<'lua, F: mlua::UserDataFields<'lua, Self>>(fields: &mut F) {
         fields.add_field_method_get("kind", |_, this| Ok(match this.kind {
             AssetKind::FormList => "formlist",
             AssetKind::Level => "level",
             AssetKind::Material => "material",
+            AssetKind::Palette => "palette",
         }));
     }
 
     fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(format!("#handle<{:?}>{{id = {:?}}}", this.kind, this.handle.id)));
         methods.add_method("get", |lua: &Lua, this: &LuaHandle, ()| {
+            let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
+            let w = world.read();
             match this.kind {
                 AssetKind::FormList => {
-                    let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
-                    let w = world.read();
                     let assets = w.get_resource::<Assets<FormList>>().unwrap();
                     if let Some(asset) = assets.get(&this.handle.clone().typed()) {
                         Ok(Some(asset.clone().to_lua(lua)?))
@@ -306,8 +314,6 @@ impl LuaUserData for LuaHandle {
                 },
                 AssetKind::Level => Err(LuaError::RuntimeError("Cannot load Level assets into Lua; see the Level module".to_string())),
                 AssetKind::Material => {
-                    let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
-                    let w = world.read();
                     if let Some(tex_mat_info) = w.get_resource::<TexMatInfo>() {
                         if let Some(texmat) = tex_mat_info.materials.get(&this.handle.clone().typed()) {
                             Ok(Some(texmat.clone().to_lua(lua)?))
@@ -315,6 +321,12 @@ impl LuaUserData for LuaHandle {
                     } else {
                         Err(LuaError::RuntimeError(format!("TexMatInfo not found")))
                     }
+                },
+                AssetKind::Palette => {
+                    let assets = w.get_resource::<Assets<Palette>>().unwrap();
+                    if let Some(asset) = assets.get(&this.handle.clone().typed()) {
+                        Ok(Some(asset.clone().to_lua(lua)?))
+                    } else { Ok(None) }
                 },
             }
         });
@@ -332,6 +344,10 @@ impl LuaUserData for LuaHandle {
                 },
                 AssetKind::Material => {
                     let assets = w.get_resource::<Assets<StandardMaterial>>().unwrap();
+                    Ok(assets.contains(&this.handle.clone().typed()))
+                },
+                AssetKind::Palette => {
+                    let assets = w.get_resource::<Assets<Palette>>().unwrap();
                     Ok(assets.contains(&this.handle.clone().typed()))
                 },
             }
@@ -516,5 +532,53 @@ impl<A, B, C, D> Into<ManyScriptVars> for (A, B, C, D) where A: Into<ScriptVar>,
 impl<A, B, C, D, E> Into<ManyScriptVars> for (A, B, C, D, E) where A: Into<ScriptVar>, B: Into<ScriptVar>, C: Into<ScriptVar>, D: Into<ScriptVar>, E: Into<ScriptVar> {
     fn into(self) -> ManyScriptVars {
         ManyScriptVars(vec![self.0.into(), self.1.into(), self.2.into(), self.3.into(), self.4.into()])
+    }
+}
+
+
+pub struct FunctionPath {
+    pub file:     String,
+    pub function: String,
+    pub config:   HashMap<String, ScriptVar>,
+}
+impl FunctionPath {
+    pub fn extract<S>(s: S) -> Result<Self, String> where S: AsRef<str> {
+        let mut iter = s.as_ref().splitn(2, '#');
+        let file     = iter.next().ok_or_else(|| format!("Path requires file: {}", s.as_ref()))?.to_string();
+        let function = iter.next().ok_or_else(|| format!("Path requires function following a #: {}", s.as_ref()))?;
+        let mut iter = function.splitn(2, '|');
+        let name     = iter.next().ok_or_else(|| format!("Path requires function name: {}", s.as_ref()))?.to_string();
+        let mut config = HashMap::new();
+        if let Some(params) = iter.next() {
+            for param in params.split(',').map(|s| s.trim()) {
+                let mut kv = param.splitn(2, '=');
+                let key = kv.next().ok_or_else(|| format!("Param requires key = param format: {}", s.as_ref()))?.to_string();
+                let val = kv.next().and_then(|v| if v == "" { None } else { Some(v) }).ok_or_else(|| format!("Param requires key = param format: {}", s.as_ref()))?.to_string();
+                config.insert(key, match val.as_str() {
+                    "true" => ScriptVar::Bool(true),
+                    "false" => ScriptVar::Bool(false),
+                    "nil" => ScriptVar::Nil,
+                    _ => {
+                        let head = val.chars().next().unwrap();
+                        if head.is_numeric() {
+                            if val.contains('.') {
+                                ScriptVar::Num(val.parse().map_err(|e| format!("Failed to parse param num: {}", e))?)
+                            } else {
+                                ScriptVar::Int(val.parse().map_err(|e| format!("Failed to parse param int: {}", e))?)
+                            }
+                        } else if head == '#' {
+                            ScriptVar::Color(Color::hex(&val[1..]).map_err(|e| format!("Failed to parse param hex color:{}", e))?)
+                        } else {
+                            ScriptVar::Str(val)
+                        }
+                    },
+                });
+            }
+        }
+        Ok(FunctionPath {
+            file,
+            function: name,
+            config,
+        })
     }
 }

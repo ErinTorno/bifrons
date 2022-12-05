@@ -1,0 +1,38 @@
+#![enable(implicit_some)]
+#![enable(unwrap_newtypes)]
+#![enable(unwrap_variant_newtypes)]
+(
+    animation: (
+        frames: {
+            "idle": [
+                (delay: 0.15, atlas: (row: 0, col: 0), parts: {"out": (color: "coffee")}),
+                (delay: 0.15, atlas: (row: 0, col: 1), parts: {"out": (color: "cream")}),
+                (delay: 0.15, atlas: (row: 0, col: 2), parts: {"out": (color: "yellow")}),
+                (delay: 0.15, atlas: (row: 0, col: 3), parts: {"out": (color: "sierra")}),
+                (delay: 0.25, atlas: (row: 0, col: 4), parts: {"out": (color: "orange")}),
+                (delay: 0.30, atlas: (row: 0, col: 5), parts: {"out": (color: "orange")}),
+                (delay: 0.35, atlas: (row: 0, col: 6), parts: {"out": (color: "rose")}),
+                (delay: 0.40, atlas: (row: 0, col: 7), parts: {"out": (color: "wine")}),
+            ],
+        },
+        parts: {
+            "bkg": Sprite(layer: Background, shape: Quad(w: 0.5, h: 0.333), material: "bkg", atlas_offset: (row: 1, col: 0)),
+            "out": Sprite(layer: Outline,    shape: Quad(w: 0.5, h: 0.333), material: "out"),
+        },
+        materials: {
+            "out": (
+                layer:            Outline,
+                color:            "coffee",
+                texture:          "effects/explosion_small.png",
+                atlas:            (rows: 2, columns: 8, width: 256, height: 172),
+                alpha_blend:      true,
+            ),
+            "bkg": (
+                layer:            Background,
+                texture:          "effects/explosion_small.png",
+                atlas:            (rows: 2, columns: 8, width: 256, height: 172),
+                alpha_blend:      true,
+            ),
+        },
+    ),
+)

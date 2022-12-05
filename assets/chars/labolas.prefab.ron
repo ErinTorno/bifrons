@@ -35,15 +35,13 @@
             "out": (
                 layer:            Outline,
                 color:            "#f64560",
-                texture:          "chars/placeholder/labolas.png",
-                alpha_blend:      true,
-                // emissive_texture: "chars/placeholder/labolas.png",
-                // emissive_color:   "#3b2e0d",
+                texture:          "chars/labolas_dnc.png",
                 atlas:            (rows: 2, columns: 6, width: 204, height: 344),
+                alpha_blend:      true,
             ),
             "bkg": (
                 layer:            Background,
-                texture:          "chars/placeholder/labolas.png",
+                texture:          "chars/labolas_dnc.png",
                 atlas:            (rows: 2, columns: 6, width: 204, height: 344),
                 alpha_blend:      true,
             ),

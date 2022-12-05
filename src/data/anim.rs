@@ -7,13 +7,21 @@ use serde::{Deserialize, Serialize};
 use crate::{system::common::ToInit, scripting::random::random_range};
 use crate::{system::texture::{MaterialColors, Background}};
 
-use super::{geometry::Shape, material::*};
+use super::{geometry::Shape, material::*, palette::DynColor};
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
 pub struct AxisChange {
     pub x: Option<f32>,
     pub y: Option<f32>,
     pub z: Option<f32>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct PartChange {
+    #[serde(default)]
+    pub color:      Option<DynColor>,
+    #[serde(default)]
+    pub is_visible: Option<bool>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -25,6 +33,8 @@ pub struct Frame {
     pub offset: AxisChange,
     #[serde(default)]
     pub scale:  AxisChange,
+    #[serde(default)]
+    pub parts: HashMap<String, PartChange>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -114,7 +124,7 @@ impl SkeletonRef {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct BoneAttachment {
     /// Name of the bone this is attached to
     pub name: String,
@@ -126,6 +136,11 @@ pub struct BoneAttachment {
     pub scale: Vec3,
 }
 pub fn default_scale() -> Vec3 { Vec3::ONE }
+impl Default for BoneAttachment {
+    fn default() -> Self {
+        BoneAttachment { name: "root".to_string(), offset: default(), scale: default_scale() }
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct SpritePart {

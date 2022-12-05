@@ -1,3 +1,4 @@
+use std::hash::{Hash, Hasher};
 use ::std::sync::Mutex;
 
 use bevy::prelude::{ClearColor, Color};
@@ -29,6 +30,20 @@ pub struct RgbaColor {
     pub g: f32,
     pub b: f32,
     pub a: f32,
+}
+impl Eq for RgbaColor {}
+impl Hash for RgbaColor {
+    fn hash<H>(&self, hasher: &mut H) where H: Hasher {
+        let safe_to_bits = |f: f32| if f.is_nan() {
+            f32::NAN
+        } else {
+            (f * 100000.0).round() / 100000.0
+        }.to_bits();
+        hasher.write_u32(safe_to_bits(self.r));
+        hasher.write_u32(safe_to_bits(self.g));
+        hasher.write_u32(safe_to_bits(self.b));
+        hasher.write_u32(safe_to_bits(self.a));
+    }
 }
 impl LuaUserData for RgbaColor {
     fn add_fields<'lua, F: mlua::UserDataFields<'lua, Self>>(fields: &mut F) {
@@ -94,18 +109,8 @@ impl LuaMod for RgbaColor {
                 Ok(())
             })?
         )?;
-        table.set("black", RgbaColor::from(Color::BLACK))?;
-        table.set("clear", RgbaColor { r: 0., g: 0., b: 0., a: 0.})?;
-        table.set("white", RgbaColor::from(Color::WHITE))?;
-        table.set("red", RgbaColor::from(Color::hex("8d3e29").unwrap()))?;
-        table.set("green", RgbaColor::from(Color::hex("579035").unwrap()))?;
-        table.set("blue", RgbaColor::from(Color::hex("5f97b6").unwrap()))?;
-        table.set("bone", RgbaColor::from(Color::hex("deceb4").unwrap()))?;
-        table.set("burgundy", RgbaColor::from(Color::hex("5e292f").unwrap()))?;
-        table.set("icy", RgbaColor::from(Color::hex("9cabb1").unwrap()))?;
-        table.set("orange", RgbaColor::from(Color::hex("e09b4d").unwrap()))?;
-        table.set("sycamore", RgbaColor::from(Color::hex("799240").unwrap()))?;
-        table.set("wine",   RgbaColor::from(Color::hex("4b4158").unwrap()))?;
+        table.set("just_black", RgbaColor::from(Color::BLACK))?;
+        table.set("just_white", RgbaColor::from(Color::WHITE))?;
         Ok(())
     }
 }
@@ -115,8 +120,13 @@ impl From<Color> for RgbaColor {
         RgbaColor { r: c[0], g: c[1], b: c[2], a: c[3] }
     }
 }
-impl Into<Color> for RgbaColor {
-    fn into(self) -> Color {
-        Color::Rgba { red: self.r, green: self.g, blue: self.b, alpha: self.a }
+impl From<RgbaColor> for Color {
+    fn from(c: RgbaColor) -> Color {
+        Color::Rgba { red: c.r, green: c.g, blue: c.b, alpha: c.a }
+    }
+}
+impl IntoHex for RgbaColor {
+    fn into_hex(&self) -> String {
+        Color::from(self.clone()).into_hex()
     }
 }

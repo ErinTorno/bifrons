@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::{PathBuf}};
 
 use bevy::{prelude::*, render::{render_resource::{AddressMode, SamplerDescriptor, FilterMode}, texture::ImageSampler}};
 use bevy_inspector_egui::Inspectable;
@@ -123,6 +123,23 @@ pub struct LoadedMaterials {
     pub by_name: HashMap<String, Handle<StandardMaterial>>,
 }
 
+pub fn resolve_texture_path(file: &String, asset_server: &AssetServer) -> PathBuf {
+    let path = PathBuf::from(file);
+    if let Some("png") = path.extension().and_then(|s| s.to_str()) {
+        let mut ktx2 = path.clone();
+        ktx2.set_extension("ktx2");
+        if asset_server.asset_io().is_file(&ktx2) {
+            return ktx2;
+        }
+    }
+    PathBuf::from(file)
+}
+
+pub fn resolve_and_load_texture(file: &String, asset_server: &AssetServer) -> Handle<Image> {
+    let path = resolve_texture_path(file, asset_server);
+    asset_server.load(path)
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TextureMaterial {
     #[serde(default)]
@@ -156,11 +173,10 @@ fn default_reflectance() -> f32 { 0.5 }
 fn default_alpha_blend() -> bool { false }
 impl TextureMaterial {
     pub fn load_textures(&self, asset_server: &AssetServer) -> TextureHandles {
-        // todo; if .kt2 or .basis file exists at same path/name but different extension, load that instead
         TextureHandles {
-            texture:  asset_server.load(&self.texture),
-            normal:   self.normal_texture.as_ref().map(|p| asset_server.load(p)),
-            emissive: self.emissive_texture.as_ref().map(|p| asset_server.load(p)),
+            texture:  resolve_and_load_texture(&self.texture, asset_server),
+            normal:   self.normal_texture.as_ref().map(|p| resolve_and_load_texture(p, asset_server)),
+            emissive: self.emissive_texture.as_ref().map(|p| resolve_and_load_texture(p, asset_server)),
         }
     }
 
