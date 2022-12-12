@@ -1,10 +1,6 @@
-
-use std::collections::HashMap;
-
 use bevy::{prelude::*, render::{texture::ImageSampler, render_resource::{SamplerDescriptor, FilterMode, Extent3d, TextureDimension, TextureFormat}}, asset::LoadState};
-use bevy_inspector_egui::{RegisterInspectable};
 
-use crate::data::{anim::ColorLayer, material::{TexMatInfo, LoadedMaterials}};
+use crate::data::{material::{TexMatInfo, MaterialColors, MaterialsToInit, TextureMaterial, LoadedMat}};
 
 #[derive(Clone, Debug, Default)]
 pub struct TexturePlugin;
@@ -12,51 +8,20 @@ pub struct TexturePlugin;
 impl Plugin for TexturePlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         app
-            .register_inspectable::<LoadedMaterials>()
-            .init_resource::<MaterialColors>()
             .init_resource::<Background>()
             .init_resource::<ImagesToCheck>()
+            .init_resource::<MaterialColors>()
+            .init_resource::<MaterialsToInit>()
             .init_resource::<MissingTexture>()
             .init_resource::<TexMatInfo>()
             .add_startup_system(setup_default_textures)
             .add_system(update_image_descriptor)
-            .add_system(update_material_colors)
             .add_system(log_asset_errors)
         ;
     }
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct MaterialColors {
-    pub layers: HashMap<Handle<StandardMaterial>, ColorLayer>,
-}
-
-pub fn update_material_colors(
-    mats:            Res<MaterialColors>,
-    clear_color:     Res<ClearColor>,
-    mut background:  ResMut<Background>,
-    mut materials:   ResMut<Assets<StandardMaterial>>,
-) {
-    if background.color != clear_color.0 {
-        if let Some(mat) = materials.get_mut(&background.material) {
-            background.color = clear_color.0;
-            mat.base_color = clear_color.0.clone();
-        }
-    }
-    for (handle, layer) in mats.layers.iter() {
-        match *layer {
-            ColorLayer::Background => {
-                if let Some(mat) = materials.get_mut(handle) {
-                    mat.base_color = clear_color.0;
-                }
-            },
-            ColorLayer::NoChange   => (),
-            ColorLayer::Outline    => (),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Resource)]
 pub struct ImagesToCheck {
     pub vec: Vec<Handle<Image>>,
 }
@@ -119,23 +84,25 @@ pub fn update_image_descriptor(
 }
 
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Resource)]
 pub struct Background {
     pub color:    Color,
     pub material: Handle<StandardMaterial>,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Resource)]
 pub struct MissingTexture {
     pub image:    Handle<Image>,
     pub material: Handle<StandardMaterial>,
 }
 
 pub fn setup_default_textures(
-    mut background:  ResMut<Background>,
-    mut missing_tex: ResMut<MissingTexture>,
-    mut images:      ResMut<Assets<Image>>,
-    mut materials:   ResMut<Assets<StandardMaterial>>,
+    mut background:   ResMut<Background>,
+    mut missing_tex:  ResMut<MissingTexture>,
+    mut images:       ResMut<Assets<Image>>,
+    mut materials:    ResMut<Assets<StandardMaterial>>,
+    mut mat_colors:   ResMut<MaterialColors>,
+    mut mats_to_init: ResMut<MaterialsToInit>,
 ) {
     background.material = materials.add(StandardMaterial {
         base_color: Color::BLACK,
@@ -143,6 +110,11 @@ pub fn setup_default_textures(
         ..default()
     });
     background.color = Color::BLACK;
+    mat_colors.by_handle.insert(background.material.clone_weak(), LoadedMat {
+        handle: background.material.clone_weak(),
+        tex_mat: TextureMaterial::BACKGROUND.clone(),
+    });
+    mats_to_init.0.insert(background.material.clone_weak());
 
     const TEXTURE_SIZE: usize = 8;
 
@@ -155,7 +127,7 @@ pub fn setup_default_textures(
         palette.rotate_right(4);
     }
 
-    let mut image = Image::new_fill(
+    let image = Image::new_fill(
         Extent3d {
             width: TEXTURE_SIZE as u32,
             height: TEXTURE_SIZE as u32,
@@ -165,12 +137,6 @@ pub fn setup_default_textures(
         &texture_data,
         TextureFormat::Rgba8UnormSrgb,
     );
-    if let ImageSampler::Descriptor(desc) =  &mut image.sampler_descriptor {
-        desc.min_filter = FilterMode::Nearest;
-        desc.mag_filter = FilterMode::Nearest;
-    } else {
-        warn!("Could not take missing_tex Image sampler_descriptor");
-    }
     missing_tex.image = images.add(image);
     missing_tex.material = materials.add(StandardMaterial {
         base_color_texture: Some(missing_tex.image.clone()),

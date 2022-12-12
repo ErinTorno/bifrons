@@ -5,28 +5,29 @@ Level(
     name:    "Testing House",
     scripts: ["levels/testing/testing_house.lua"],
     lines: {
+        "english": {
+            "name":  "Testing House",
+            "where": "Somewhere in the abyss",
+        },
     },
     player_spawn: [
         (room: "foyer", grid: "main", pos: (5, 5)),
     ],
-    background: "#100f14",
     skybox:     "skybox/space.ktx2",
     materials: {
         // implicit "background" material that is a fill of the current background
         "floor": (
             layer: Outline,
-            color: "#4b4158",
+            color: "purple",
             texture: "tiles/floor_squiggle.png",
             // normal: "tiles/floor_squiggle_n.png",
             mode: Repeat(step: 2., on_step: Rotate180),
         ),
-        "siding": (layer: Outline, color: "#4b4158", texture: "tiles/siding.png", mode: Repeat()),
+        "siding": (layer: Outline, color: "purple", texture: "tiles/siding.png", mode: Repeat()),
         "window": (
             layer: Outline,
-            color: "#9cabb1",
+            color: "icy",
             texture:          "tiles/window.png",
-            // emissive_texture: "tiles/window.png",
-            // emissive_color:   "#111f25",
             mode: Repeat(step: 2.),
             reflectance: 0.9,
         ),
@@ -52,19 +53,12 @@ Level(
             },
             prefabs: [
                 (asset: "props/furniture/end_table", at: Free(-2.9, 0., 2.)), // can drop .prefab.ron extension here, since it already knows it'll need that
-                (asset: "props/furniture/painting",  at: Free(-2.3, 1., -5.8), rotation: (0., 0., 0.3926), script_vars: {
-                    // "painting_variant": Str("book_guy"),
-                    // "painting_color":   Color("#ff00bc"),
-                }),
+                (asset: "props/furniture/painting",  at: Free(-2.3, 1., -5.8), rotation: (0., 0., 0.3926)),
                 (
                     label: "foyer_lantern",
                     asset: "items/lantern", // dropped extension, see above
                     at: Free(-3, 0.34, 1.9),
                     rotation: (0., 1.0471, 0.),
-                    script_vars: {
-                        // "lantern_color":    Color("#6cd47f"),
-                        // "lantern_emissive": Color("#63602e"),
-                    },
                 ),
             ],
             geometry: [
@@ -91,22 +85,22 @@ Level(
                 ),
             ],
             lights: [
-                // (
-                //     label: "foyer_lights",
-                //     pos: (0.19, 4., -2.5),
-                //     color: "#f3d79b",
-                //     shadows_enabled: true,
-                //     kind: Point(intensity: 6000.),
-                //     anim: Sin(period: 1.25, amplitude: 0.12),
-                // ),
-                // (
-                //     label: "foyer_lights",
-                //     pos: (0.17, 4., 2.5),
-                //     color: "#ffd293",
-                //     shadows_enabled: true,
-                //     kind: Point(intensity: 6000.),
-                //     anim: Sin(period: 1.25, amplitude: 0.2, phase_shift: 0.785398163397),
-                // ),
+                (
+                    label: "foyer_lights",
+                    pos: (0.19, 4., -2.5),
+                    color: "cream",
+                    shadows_enabled: true,
+                    kind: Point(intensity: 6000.),
+                    anim: Sin(period: 1.25, amplitude: 0.12),
+                ),
+                (
+                    label: "foyer_lights",
+                    pos: (0.17, 4., 2.5),
+                    color: "yellow",
+                    shadows_enabled: true,
+                    kind: Point(intensity: 6000.),
+                    anim: Sin(period: 1.25, amplitude: 0.2, phase_shift: 0.785398163397),
+                ),
             ]
         ),
     },

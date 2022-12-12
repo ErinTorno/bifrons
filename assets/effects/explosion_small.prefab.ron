@@ -16,19 +16,18 @@
             ],
         },
         parts: {
-            "bkg": Sprite(layer: Background, shape: Quad(w: 0.5, h: 0.333), material: "bkg", atlas_offset: (row: 1, col: 0)),
-            "out": Sprite(layer: Outline,    shape: Quad(w: 0.5, h: 0.333), material: "out"),
+            "bkg": Sprite(shape: Quad(w: 0.5, h: 0.333), material: "bkg", atlas_offset: (row: 1, col: 0)),
+            "out": Sprite(shape: Quad(w: 0.5, h: 0.333), material: "out"),
         },
         materials: {
             "out": (
-                layer:            Outline,
                 color:            "coffee",
                 texture:          "effects/explosion_small.png",
                 atlas:            (rows: 2, columns: 8, width: 256, height: 172),
                 alpha_blend:      true,
             ),
             "bkg": (
-                layer:            Background,
+                color:            "background",
                 texture:          "effects/explosion_small.png",
                 atlas:            (rows: 2, columns: 8, width: 256, height: 172),
                 alpha_blend:      true,

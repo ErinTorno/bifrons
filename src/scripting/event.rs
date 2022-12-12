@@ -52,6 +52,7 @@ pub const ON_UPDATE:      &str = "on_update";
 
 pub mod constants {
     /// How many seconds it takes until the next on_update call
+    /// 
     /// With 1/15, on_update is called 15 times a second
     pub const ON_UPDATE_DELAY: f32 = 1. / 15.;
 }

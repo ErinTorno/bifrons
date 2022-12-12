@@ -1,11 +1,9 @@
-use std::collections::HashMap;
-
-use bevy::{prelude::*, render::{mesh::{Mesh}}, time::Timer, utils::{default, Uuid}, scene::{SceneBundle, Scene}, ecs::system::EntityCommands};
+use bevy::{prelude::*, render::{mesh::{Mesh}}, time::Timer, utils::{default, Uuid, HashMap}, scene::{SceneBundle, Scene}, ecs::system::EntityCommands};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{system::common::ToInit, scripting::random::random_range};
-use crate::{system::texture::{MaterialColors, Background}};
+use crate::{system::texture::{Background}};
 
 use super::{geometry::Shape, material::*, palette::DynColor};
 
@@ -35,17 +33,6 @@ pub struct Frame {
     pub scale:  AxisChange,
     #[serde(default)]
     pub parts: HashMap<String, PartChange>,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub enum ColorLayer {
-    NoChange,
-    Outline,
-    Background,
-}
-
-impl Default for ColorLayer {
-    fn default() -> Self { ColorLayer::Outline }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -98,7 +85,7 @@ impl SkeletonRef {
 
     pub fn add_bone(&mut self, commands: &mut EntityCommands, bone: &Bone, is_visible: bool) {
         commands.add_children(|parent| {
-            let mut builder = parent.spawn();
+            let mut builder = parent.spawn_empty();
             if let Some(v) = self.entities.get_mut(&bone.name) {
                 v.push(builder.id());
             } else {
@@ -106,17 +93,18 @@ impl SkeletonRef {
             }
 
             let is_visible = is_visible && bone.is_visible;
-            builder
-                .insert(Name::new(format!("{}/{}", self.uuid, bone.name)))
-                .insert_bundle(VisibilityBundle {
-                    visibility: Visibility { is_visible },
-                    ..default()
-                })
-                .insert_bundle(TransformBundle {
+            builder.insert((
+                Name::new(format!("{}/{}", self.uuid, bone.name)),
+                TransformBundle {
                     local: Transform::from_translation(bone.offset)
                         .with_rotation(Quat::from_euler(EulerRot::XYZ, bone.rotation.x, bone.rotation.y, bone.rotation.z)),
                     ..default()
-                });
+                },
+                VisibilityBundle {
+                    visibility: Visibility { is_visible },
+                    ..default()
+                },
+            ));
             for child in bone.children.iter() {
                 self.add_bone(&mut builder, child.as_ref(), is_visible);
             }
@@ -146,10 +134,9 @@ impl Default for BoneAttachment {
 pub struct SpritePart {
     #[serde(default)]
     pub bone:  BoneAttachment,
-    pub layer: ColorLayer,
     pub shape: Shape,
     #[serde(default)]
-    pub material: Option<String>,
+    pub material: String,
     #[serde(default)]
     pub atlas_offset: AtlasIndex,
     #[serde(default)]
@@ -194,24 +181,33 @@ pub struct Animation {
 }
 
 impl Animation {
-    fn get_tex(
+    fn load_anim_mat(
         &self,
         mat_name:     &String,
         asset_server: &AssetServer,
         tex_mat_info: &mut TexMatInfo,
         background:   &Background,
         materials:    &mut Assets<StandardMaterial>,
-    ) -> (Handle<StandardMaterial>, TextureMaterial) {
+    ) -> LoadedMat {
         if mat_name.as_str() == "background" {
-            (background.material.clone(), TextureMaterial::BACKGROUND)
+            LoadedMat {
+                handle:  background.material.clone(),
+                tex_mat: TextureMaterial::BACKGROUND,
+            }
         } else if let Some(mat) = self.materials.get(mat_name) {
-            (mat.load_material(asset_server, tex_mat_info, materials), mat.clone())
+            LoadedMat {
+                handle:  mat.load_material(asset_server, tex_mat_info, materials),
+                tex_mat: mat.clone(),
+            }
         } else {
             warn!("Material \"{}\" not found", mat_name);
-            (materials.add(StandardMaterial {
-                unlit: true,
-                ..default()
-            }), TextureMaterial::MISSING)
+            LoadedMat {
+                handle:  materials.add(StandardMaterial {
+                    unlit: true,
+                    ..default()
+                }),
+                tex_mat: TextureMaterial::MISSING,
+            }
         }
     }
 
@@ -220,6 +216,7 @@ impl Animation {
         entity:       Entity,
         commands:     &mut Commands,
         mat_colors:   &mut MaterialColors,
+        mats_to_init: &mut MaterialsToInit,
         asset_server: &AssetServer,
         tex_mat_info: &mut TexMatInfo,
         background:   &Background,
@@ -232,29 +229,17 @@ impl Animation {
         for (part_name, part) in self.parts.iter() {
             match part {
                 AnimPart::Sprite(part) => {
-                    let (material, texmat) = if let Some(mat_name) = part.material.as_ref() {
-                        let pair = self.get_tex(mat_name, asset_server, tex_mat_info, background, materials);
-                        by_name.insert(mat_name.clone(), pair.0.clone());
-                        pair
-                    } else {
-                        if part.layer == ColorLayer::Background {
-                            (background.material.clone(), TextureMaterial::BACKGROUND)
-                        } else {
-                            warn!("No material given for Animation SpritePart {}", part_name);
-                            (materials.add(StandardMaterial {
-                                unlit: true,
-                                ..default()
-                            }), TextureMaterial::MISSING)
-                        }
+                    let anim_mat = {
+                        let m = self.load_anim_mat(&part.material, asset_server, tex_mat_info, background, materials);
+                        by_name.insert(part.material.clone(), m.handle.clone());
+                        m
                     };
-                    
-                    mat_colors.layers.insert(material.clone_weak(), part.layer);
         
                     let shape = match &part.shape {
                         Shape::Quad { w, h, d, one_sided } => Shape::Quad { w: *w, h: *h, d: d + layer, one_sided: *one_sided },
                         s => s.clone(),
                     };
-                    let mesh = meshes.add(shape.mk_mesh(asset_server, &texmat, part.bone.offset + (Vec3::Y * part.shape.height() / 2.), part.atlas_offset));
+                    let mesh = meshes.add(shape.mk_mesh(&anim_mat.tex_mat, part.bone.offset + (Vec3::Y * part.shape.height() / 2.), part.atlas_offset));
         
                     let parent = if let Some(entities) = skeleton.entities.get(&part.bone.name) {
                         if entities.is_empty() {
@@ -271,22 +256,25 @@ impl Animation {
                         entity
                     };
                     commands.entity(parent).add_children(|parent| {
-                        parent.spawn().insert_bundle(PbrBundle {
-                                mesh,
-                                transform: Transform::from_translation(Vec3::Y * 0.00001).with_scale(part.bone.scale),
-                                material,
-                                ..default()
+                        parent.spawn(PbrBundle {
+                            mesh,
+                            transform: Transform::from_translation(Vec3::Y * 0.00001).with_scale(part.bone.scale),
+                            material: anim_mat.handle.clone(),
+                            ..default()
                         });
                     });
+                    
+                    mats_to_init.0.insert(anim_mat.handle.clone_weak());
+                    mat_colors.by_handle.insert(anim_mat.handle.clone_weak(), anim_mat);
                     layer += 0.00001;
                 },
                 AnimPart::Scene(part) => {
                     let mut mat_overrides = HashMap::new();
 
                     for (name, mat_name) in part.mat_overrides.iter() {
-                        let (material, _) = self.get_tex(mat_name, asset_server, tex_mat_info, background, materials);
-                        by_name.insert(mat_name.clone(), material.clone());
-                        mat_overrides.insert(name.clone(), material);
+                        let m = self.load_anim_mat(mat_name, asset_server, tex_mat_info, background, materials);
+                        by_name.insert(mat_name.clone(), m.handle.clone_weak());
+                        mat_overrides.insert(name.clone(), m.handle);
                     }
 
                     let parent = if let Some(entities) = skeleton.entities.get(&part.bone.name) {
@@ -304,17 +292,18 @@ impl Animation {
                         entity
                     };
                     commands.entity(parent).add_children(|parent| {
-                        parent.spawn()
-                            .insert_bundle(SceneBundle  {
+                        parent.spawn((
+                            SceneBundle {
                                 scene: asset_server.load(&part.asset),
                                 transform: Transform::from_translation(part.bone.offset).with_scale(part.bone.scale),
                                 ..default()
-                            }).insert(SceneOverride {
-                                mat_overrides,
-                            }).insert(ToInit::<Scene>::default());
+                            },
+                            SceneOverride { mat_overrides },
+                            ToInit::<Scene>::default(),
+                        ));
                     });
                 },
-                AnimPart::Collision(part) => {
+                AnimPart::Collision(_part) => {
 
                 },
             }
@@ -337,7 +326,7 @@ pub struct AnimationState {
 impl AnimationState {
     pub fn new(anim: &Animation, animname: &String, flat_skeleton: HashMap<String, Entity>) -> AnimationState {
         let mut st = AnimationState {
-            timer:           Timer::from_seconds(100., true),
+            timer:           Timer::from_seconds(100., TimerMode::Repeating),
             animname:        animname.clone(),
             frame_idx:       0,
             atlas_idx:       AtlasIndex::default(),
@@ -360,7 +349,7 @@ impl AnimationState {
                 cur_time += frame.delay;
                 time_boundaries.push(cur_time);
             }
-            self.timer = Timer::from_seconds(if cur_time <= 0. { 100000. } else { cur_time }, true);
+            self.timer = Timer::from_seconds(if cur_time <= 0. { 100000. } else { cur_time }, TimerMode::Repeating);
             self.frame_idx = 0;
             self.atlas_idx = atlas_idx.unwrap_or(AtlasIndex::default());
         } else {

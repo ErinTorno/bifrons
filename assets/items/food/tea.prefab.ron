@@ -2,26 +2,31 @@
 #![enable(unwrap_newtypes)]
 #![enable(unwrap_variant_newtypes)]
 Prefab(
-    scripts: ["items/lantern.lua"],
     lines: {
-        "name": "Tea",
+        "name":    "Tea",
         "name#bl": "Black tea",
         "name#bs": "Blackberry sage tea",
+        "name#bt": "Butter tea",
         "name#ch": "Chai tea",
+        "name#cm": "Chamomile tea",
         "name#da": "Dandelion tea",
+        "name#dl": "Dried lime tea",
         "name#eg": "Earl Grey tea",
         "name#eg": "Expresso black tea",
         "name#gr": "Green tea",
-        "name#lp": "Lemon pine tea",
+        "name#hw": "Hwangcha yellow tea",
+        "name#lp": "Lapsang souchong",
+        "name#lm": "Lemon pine tea",
         "name#ma": "Macha tea",
         "name#mn": "Mint green tea",
         "name#mp": "Maple black tea",
+        "name#mt": "Mate",
         "name#oo": "Oolong tea",
         "name#pc": "Peach ginger black tea",
         "name#pw": "Pomegranite white tea",
         "name#ro": "Rooibos tea",
-        "name#sw": "Sakura white tea",
+        "name#sa": "Sakura white tea",
+        "name#sw": "Sweet tea",
     },
-    tags: ["lightsource", "weapon"],
-    // animate NoChange color
+    tags: ["beverage", "food"],
 )

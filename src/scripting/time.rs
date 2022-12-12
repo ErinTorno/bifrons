@@ -1,29 +1,13 @@
-use ::std::sync::Mutex;
-
-use bevy::{time::Time};
-use bevy_inspector_egui::Inspectable;
-use bevy_mod_scripting::{prelude::*, lua::api::bevy::LuaWorld};
-use mlua::Lua;
+use bevy::prelude::*;
+use bevy_inspector_egui::prelude::*;
+use mlua::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use super::{init_luamod, LuaMod};
+use crate::data::lua::LuaWorld;
 
-#[derive(Default)]
-pub struct TimeAPIProvider;
+use super::{LuaMod};
 
-impl APIProvider for TimeAPIProvider {
-    type APITarget = Mutex<Lua>;
-    type DocTarget = LuaDocFragment;
-    type ScriptContext = Mutex<Lua>;
-
-    fn attach_api(&mut self, ctx: &mut Self::APITarget) -> Result<(), ScriptError> {
-        let ctx = ctx.get_mut().unwrap();
-        init_luamod::<LuaTime>(ctx).map_err(ScriptError::new_other)?;
-        Ok(())
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default, Deserialize, Inspectable, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, InspectorOptions, PartialEq, Resource, Serialize, Reflect)]
 pub struct LuaTime {
     #[serde(default)]
     pub delta:   f64,
@@ -44,7 +28,7 @@ impl LuaMod for LuaTime {
     fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
         table.set("elapsed", lua.create_function(|ctx, ()| {
                 match ctx.globals().get::<_, LuaWorld>("world").unwrap().read().get_resource::<Time>() {
-                    Some(t) => Ok(Some(t.seconds_since_startup())),
+                    Some(t) => Ok(Some(t.elapsed_seconds_f64())),
                     None => Ok(None)
                 }
             })?
@@ -53,7 +37,7 @@ impl LuaMod for LuaTime {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, Inspectable, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, InspectorOptions, PartialEq, Serialize)]
 pub struct LuaTimer {
     #[serde(default)]
     pub start:    f64,

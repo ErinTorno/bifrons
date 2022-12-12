@@ -1,7 +1,6 @@
 use std::{collections::{hash_map::RawEntryMut, HashMap}, f32::consts::PI};
 
-use bevy::{prelude::*, input::mouse::{MouseWheel, MouseMotion}};
-use bevy_inspector_egui::RegisterInspectable;
+use bevy::{prelude::*, input::mouse::{MouseWheel, MouseMotion}, window::CursorGrabMode};
 
 use crate::{data::input::*, util::Timestamped};
 
@@ -11,7 +10,6 @@ pub struct ActionPlugin;
 impl Plugin for ActionPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         app
-            .register_inspectable::<ActionState>()
             .add_system(update_action_state)
         ;
     }
@@ -29,9 +27,9 @@ pub fn update_action_state(
     mut query:          Query<(&mut ActionState, &InputMap)>,
 ) {
     let window = windows.primary_mut();
-    let mut should_unlock_mouse = true;
+    let mut grab_mode = CursorGrabMode::None;
     let mut scroll = 0.;
-    let secs = time.seconds_since_startup();
+    let secs = time.elapsed_seconds_f64();
     let mut gamepad_axes = HashMap::<Gamepad, HashMap<GamepadAxisType, f32>>::new();
     let mut vec_chain = Vec::new();
     for event in mouse_motion.iter() {
@@ -56,7 +54,7 @@ pub fn update_action_state(
                         } else {
                             let t = InputTime::from_input(&mouse_button_input, *hold, secs);
                             if t != InputTime::NotPressed {
-                                should_unlock_mouse = false;
+                                grab_mode = CursorGrabMode::Locked;
                                 let mut vecs = if action_state.input_ts(action).is_vec_chain() {
                                     let ts = action_state.inputs.remove(action).unwrap();
                                     match ts.data {
@@ -135,6 +133,6 @@ pub fn update_action_state(
             }
         }
     }
-    window.set_cursor_visibility(should_unlock_mouse);
-    window.set_cursor_lock_mode(!should_unlock_mouse);
+    window.set_cursor_visibility(grab_mode == CursorGrabMode::None);
+    window.set_cursor_grab_mode(grab_mode);
 }

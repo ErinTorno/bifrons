@@ -10,7 +10,6 @@ local g_lobby_themes = {}
 --      :to("levels/main_menu/main.lua")
 --      :add_arg("my_theme_name")
 --      :add_arg({
---          background = Color.hex("#100f14"), -- the background color to use in the lobby; if nil, then it uses the main menu color
 --          piece      = "levels/my_level/my_lobby.piece.ron", -- extension optional; if nil, then default lobby piece is used
 --      })
 --      :send()

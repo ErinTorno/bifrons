@@ -1,35 +1,24 @@
 use std::hash::{Hash, Hasher};
-use ::std::sync::Mutex;
 
-use bevy::prelude::{ClearColor, Color};
-use bevy_mod_scripting::{prelude::*, lua::api::bevy::LuaWorld};
-use mlua::Lua;
+use bevy::{prelude::{ClearColor, Color}, reflect::{Reflect, FromReflect}};
+use mlua::prelude::*;
+use serde::{de, Serialize, Deserialize, Deserializer, Serializer};
 
-use crate::{util::IntoHex, scripting::init_luamod};
+use crate::{util::IntoHex, data::lua::LuaWorld};
 
 use super::LuaMod;
 
-#[derive(Default)]
-pub struct ColorAPIProvider;
-
-impl APIProvider for ColorAPIProvider {
-    type APITarget = Mutex<Lua>;
-    type DocTarget = LuaDocFragment;
-    type ScriptContext = Mutex<Lua>;
-
-    fn attach_api(&mut self, ctx: &mut Self::APITarget) -> Result<(), ScriptError> {
-        let ctx = ctx.get_mut().unwrap();
-        init_luamod::<RgbaColor>(ctx).map_err(ScriptError::new_other)?;
-        Ok(())
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, FromReflect, PartialEq, Reflect)]
 pub struct RgbaColor {
     pub r: f32,
     pub g: f32,
     pub b: f32,
     pub a: f32,
+}
+impl RgbaColor {
+    pub const BLACK:   RgbaColor = RgbaColor {r: 0., g: 0., b: 0., a: 1.};
+    pub const WHITE:   RgbaColor = RgbaColor {r: 1., g: 1., b: 1., a: 1.};
+    pub const FUSCHIA: RgbaColor = RgbaColor {r: 0.56, g: 0.34, b: 0.64, a: 1.};
 }
 impl Eq for RgbaColor {}
 impl Hash for RgbaColor {
@@ -43,6 +32,20 @@ impl Hash for RgbaColor {
         hasher.write_u32(safe_to_bits(self.g));
         hasher.write_u32(safe_to_bits(self.b));
         hasher.write_u32(safe_to_bits(self.a));
+    }
+}
+impl<'de> Deserialize<'de> for RgbaColor {
+    fn deserialize<D>(d: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
+        let s: String = Deserialize::deserialize(d)?;
+        Color::hex(&s[1..].to_string())
+            .map(RgbaColor::from)
+            .map_err(|e| de::Error::custom(format!("{}", e)))
+    }
+}
+impl Serialize for RgbaColor {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+        let s = format!("#{}", Color::from(*self).into_hex());
+        serializer.serialize_str(s.as_str())
     }
 }
 impl LuaUserData for RgbaColor {
@@ -88,7 +91,7 @@ impl LuaUserData for RgbaColor {
     }
 }
 impl LuaMod for RgbaColor {
-    fn mod_name() -> &'static str { "Color" }
+    fn mod_name() -> &'static str { "Rgba" }
     fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
         table.set("hex", lua.create_function(|_, hex: String| {
                 let s = if hex.starts_with('#') { &hex[1..] } else { hex.as_str() };
@@ -109,8 +112,8 @@ impl LuaMod for RgbaColor {
                 Ok(())
             })?
         )?;
-        table.set("just_black", RgbaColor::from(Color::BLACK))?;
-        table.set("just_white", RgbaColor::from(Color::WHITE))?;
+        table.set("black", RgbaColor::from(Color::BLACK))?;
+        table.set("white", RgbaColor::from(Color::WHITE))?;
         Ok(())
     }
 }

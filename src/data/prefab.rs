@@ -1,11 +1,7 @@
-use std::collections::HashMap;
-
-use bevy::{asset::*, prelude::*, reflect::TypeUuid, utils::HashSet};
+use bevy::{asset::*, prelude::*, reflect::TypeUuid, utils::{HashMap, HashSet}};
 use serde::{Deserialize, Serialize};
 
-use crate::scripting::LuaScriptVars;
-
-use super::{anim::Animation, lang::Lines, item::Item, stat::Attributes};
+use super::{anim::Animation, lang::Lines, item::Item, stat::Attributes, lua::LuaScriptVars};
 
 #[derive(Clone, Component, Debug)]
 pub struct Tags(pub HashSet<String>);
@@ -40,7 +36,6 @@ impl AssetLoader for PrefabLoader {
         Box::pin(async move {
             let prefab: Prefab = ron::de::from_bytes(bytes)?;
             load_context.set_default_asset(LoadedAsset::new(prefab));
-            info!("{} Prefab asset finished loading", load_context.path().to_string_lossy());
             Ok(())
         })
     }

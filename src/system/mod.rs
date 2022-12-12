@@ -2,6 +2,7 @@ pub mod action;
 pub mod anim;
 pub mod camera;
 pub mod common;
+pub mod lua;
 pub mod level;
 pub mod palette;
 pub mod prefab;

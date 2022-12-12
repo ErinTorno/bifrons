@@ -1,8 +1,8 @@
 use bevy::{prelude::{Color, Component}, ecs::system::EntityCommands};
-use bevy_inspector_egui::Inspectable;
+use bevy_inspector_egui::prelude::*;
 
+pub mod collections;
 pub mod serialize;
-
 pub trait IntoHex {
     fn into_hex(&self) -> String;
 }
@@ -17,10 +17,13 @@ impl IntoHex for Color {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Inspectable, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Timestamped<T> {
     pub time:  f64,
     pub value: T,
+}
+impl<T> From<Timestamped<T>> for InspectorOptions {
+    fn from(_: Timestamped<T>) -> Self { InspectorOptions::default() }
 }
 
 pub fn pair_clone<A, B>((a, b): (&A, &B)) -> (A, B) where A: Clone, B: Clone {

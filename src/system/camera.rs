@@ -59,7 +59,7 @@ pub fn setup_camera(
         
         commands.entity(entity)
             .remove::<ToInit<Camera3d>>()
-            .insert_bundle(Camera3dBundle {
+            .insert(Camera3dBundle {
                 transform: transform.unwrap_or(Transform::from_xyz(4.0, 4.0, 6.0).looking_at(Vec3::new(0., 2., 0.), Vec3::Y)),
                 ..default()
             });
@@ -76,7 +76,7 @@ pub fn cam_movement(
     let window_size = Vec2::new(window.width() as f32, window.height() as f32);
     for (mut transform, camera) in cam_query.iter_mut() {
         if let Some(entity) = camera.controller {
-            if let Some((a_trans, mut a_state, a_inputmap)) = actor_query.get_mut(entity).ok() {
+            if let Some((_a_trans, mut a_state, a_inputmap)) = actor_query.get_mut(entity).ok() {
                 let mut x_speed = 0.;
                 let mut y_speed = 0.;
                 let mut rz_speed = 0.;

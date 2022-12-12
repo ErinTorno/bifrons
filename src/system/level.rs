@@ -1,12 +1,11 @@
 use std::{collections::{HashMap, HashSet}};
 
 use bevy::{prelude::*};
-use bevy_mod_scripting::{prelude::*};
 use iyes_loopless::prelude::IntoConditionalSystem;
 
-use crate::{data::{level::*, material::{TextureMaterial, AtlasIndex, TexMatInfo}, geometry::Shape, prefab::{PrefabLoader, Prefab}}, scripting::{random, AwaitScript, event::ON_ROOM_REVEAL, ScriptVar}, util::InsertableWithPredicate};
+use crate::{data::{level::*, material::{TextureMaterial, AtlasIndex, TexMatInfo, MaterialColors, MaterialsToInit, LoadedMat}, geometry::{Shape, LightAnimState, LightAnim}, prefab::{PrefabLoader, Prefab}, lua::{LuaScript, ScriptVar, Hook}}, scripting::{random, event::ON_ROOM_REVEAL}, util::InsertableWithPredicate};
 
-use super::{texture::{MissingTexture, Background}, common::{fix_missing_extension, ToInitHandle}};
+use super::{texture::{MissingTexture, Background}, common::{fix_missing_extension, ToInitHandle}, lua::{ToInitScripts, SharedInstances, LuaQueue, HookCall}};
 
 #[derive(Clone, Debug, Default)]
 pub struct LevelPlugin;
@@ -21,11 +20,14 @@ impl Plugin for LevelPlugin {
             .add_system(load_level
                 .run_if_resource_exists::<LoadingLevel>())
             .add_system(reset_loaded_level
-                .run_if_resource_exists::<LoadedLevel>());
+                .run_if_resource_exists::<LoadedLevel>())
+            .register_type::<LightAnim>()
+            .register_type::<LightAnimState>()
+        ;
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Resource)]
 pub struct LoadingLevel {
     pub handle: Handle<Level>,
 }
@@ -41,10 +43,10 @@ pub fn load_level(
     levels:        Res<Assets<Level>>,
 ) {
     if let Some(level) = levels.get(&st.handle) {
-        let level_entity = commands.spawn()
-            .insert_bundle(VisibilityBundle::default())
-            .insert_bundle(TransformBundle::default())
-            .id();
+        let level_entity = commands.spawn((
+            TransformBundle::default(),
+            VisibilityBundle::default(),
+        )).id();
         commands.remove_resource::<LoadingLevel>();
         commands
             .insert_resource(LoadedLevel {
@@ -55,6 +57,7 @@ pub fn load_level(
     }
 }
 
+#[derive(Resource)]
 pub struct LoadedLevel {
     pub should_reset: bool,
     pub level:        Level,
@@ -62,48 +65,52 @@ pub struct LoadedLevel {
 }
 
 pub fn reset_loaded_level(
-    mut st:           ResMut<LoadedLevel>,
-    mut commands:     Commands,
-    background:       Res<Background>,
-    mut ccolor:       ResMut<ClearColor>,
-    mut tex_mat_info: ResMut<TexMatInfo>,
-    asset_server:     Res<AssetServer>,
-    mut materials:    ResMut<Assets<StandardMaterial>>,
+    mut st:            ResMut<LoadedLevel>,
+    mut commands:      Commands,
+    mut lua_instances: ResMut<SharedInstances>,
+    mut mat_colors:    ResMut<MaterialColors>,
+    mut mats_to_init:  ResMut<MaterialsToInit>,
+    mut tex_mat_info:  ResMut<TexMatInfo>,
+    asset_server:      Res<AssetServer>,
+    mut materials:     ResMut<Assets<StandardMaterial>>,
 ) {
     if st.should_reset {
         let level = &st.level;
         random::set_seed(rand::prelude::random()); // todo should this be lobby setting?
-        ccolor.0 = level.background;
-        {
-            let mut mat = materials.get_mut(&background.material).unwrap();
-            mat.base_color = level.background;
-        }
 
         // Scripts
-
-        let scripts: Vec<Script<LuaFile>> = level.scripts.iter().map(|path| {
-            let handle = asset_server.load::<LuaFile, _>(path);
-            Script::<LuaFile>::new(path.clone(), handle)
-        }).collect();
-
-        let waiting_scripts: HashSet<u32> = scripts.iter().map(Script::id).collect();
+        let handles: HashMap<u32, Handle<LuaScript>> = level.scripts.iter().map(|s| (lua_instances.gen_next_id(), asset_server.load(s))).collect();
+        let waiting_scripts: HashSet<u32> = handles.keys().cloned().collect();
         
         commands.entity(st.level_entity)
-            .remove::<ScriptCollection::<LuaFile>>()
-            .insert(Name::from(level.name.clone()))
-            .insert(level.script_vars.clone())
-            .insert(ScriptCollection::<LuaFile> { scripts });
+            .remove::<(
+                LuaQueue,
+                ToInitScripts,
+            )>()
+            .insert((
+                level.script_vars.clone(),
+                Name::from(level.name.clone()),
+                ToInitScripts { handles },
+            ));
 
         // Visuals
 
         let materials: HashMap<String, (Handle<StandardMaterial>, TextureMaterial)> = level.materials.iter()
             .map(|(name, mat)| (name.clone(), (mat.load_material(&asset_server, tex_mat_info.as_mut(), materials.as_mut()), mat.clone())))
             .collect();
+
+        for (handle, tex_mat) in materials.values() {
+            mat_colors.by_handle.insert(handle.clone_weak(), LoadedMat {
+                handle: handle.clone_weak(),
+                tex_mat: tex_mat.clone(),
+            });
+            mats_to_init.0.insert(handle.clone_weak());
+        }
         
         commands.entity(st.level_entity)
             .add_children(|parent| {
                 for (room_name, room) in level.rooms.iter() {
-                    parent.spawn().insert(ToSpawnRoom {
+                    parent.spawn(ToSpawnRoom {
                         materials: materials.clone(),
                         waiting_scripts: waiting_scripts.clone(),
                         room: room.clone(),
@@ -112,38 +119,47 @@ pub fn reset_loaded_level(
                     });
                 }
             });
+
         st.should_reset = false;
     }
 }
 
 fn spawn_level_piece(
-    mut commands:     Commands,
-    mut tex_mat_info: ResMut<TexMatInfo>,
-    asset_server:     Res<AssetServer>,
-    level_pieces:     Res<Assets<LevelPiece>>,
-    mut materials:    ResMut<Assets<StandardMaterial>>,
+    mut commands:      Commands,
+    mut mat_colors:    ResMut<MaterialColors>,
+    mut mats_to_init:  ResMut<MaterialsToInit>,
+    mut lua_instances: ResMut<SharedInstances>,
+    mut tex_mat_info:  ResMut<TexMatInfo>,
+    asset_server:      Res<AssetServer>,
+    level_pieces:      Res<Assets<LevelPiece>>,
+    mut materials:     ResMut<Assets<StandardMaterial>>,
     query: Query<(Entity, &Name, &Visibility, &ToInitHandle<LevelPiece>)>,
 ) {
     for (entity, name, visibility, ToInitHandle(to_init)) in query.iter() {
         if let Some(level_piece) = level_pieces.get(to_init) {
-            let scripts: Vec<Script<LuaFile>> = level_piece.scripts.iter().map(|path| {
-                let handle = asset_server.load::<LuaFile, _>(path);
-                Script::<LuaFile>::new(path.clone(), handle)
-            }).collect();
-
-            let waiting_scripts: HashSet<u32> = scripts.iter().map(Script::id).collect();
-
+            let handles: HashMap<u32, Handle<LuaScript>> = level_piece.scripts.iter().map(|s| (lua_instances.gen_next_id(), asset_server.load(s))).collect();
+            let waiting_scripts = handles.keys().cloned().collect();
+            
             commands.entity(entity)
                 .remove::<ToInitHandle<LevelPiece>>()
-                .remove::<ScriptCollection::<LuaFile>>()
-                .insert(ScriptCollection::<LuaFile> { scripts })
-                .insert(level_piece.script_vars.clone())
-                .add_children(|parent| {
+                .insert((
+                    level_piece.script_vars.clone(),
+                    LuaQueue::default(),
+                    ToInitScripts { handles },
+                )).add_children(|parent| {
                     let materials: HashMap<String, (Handle<StandardMaterial>, TextureMaterial)> = level_piece.materials.iter()
                         .map(|(name, mat)| (name.clone(), (mat.load_material(&asset_server, tex_mat_info.as_mut(), materials.as_mut()), mat.clone())))
                         .collect();
 
-                    parent.spawn().insert(ToSpawnRoom {
+                    for (handle, tex_mat) in materials.values() {
+                        mat_colors.by_handle.insert(handle.clone_weak(), LoadedMat {
+                            handle: handle.clone_weak(),
+                            tex_mat: tex_mat.clone(),
+                        });
+                        mats_to_init.0.insert(handle.clone_weak());
+                    }
+
+                    parent.spawn(ToSpawnRoom {
                         materials,
                         waiting_scripts,
                         room: level_piece.room.clone(),
@@ -181,30 +197,30 @@ pub fn spawn_room(
         let is_revealed = *is_revealed || room.reveal_before_entry;
         commands.entity(room_entity)
             .remove::<ToSpawnRoom>()
-            .insert_bundle(VisibilityBundle {
+            .insert(VisibilityBundle {
                 visibility: Visibility { is_visible: is_revealed },
                 ..VisibilityBundle::default()
             })
             .insert(Name::from(room_name.clone()))
-            .insert_bundle(TransformBundle {
+            .insert(TransformBundle {
                 local: Transform::from_translation(room.pos),
                 ..TransformBundle::default()
             })
             .add_children(|parent| {
                 for geometry in room.geometry.iter() {
                     let mut layer_offset = 0.;
-                    parent.spawn()
-                        .insert_bundle(VisibilityBundle::default())
-                        .insert_bundle(TransformBundle {
+                    parent.spawn((
+                        Name::new(geometry.label.as_ref().cloned().unwrap_or(format!("unnamed {}", geometry.shape.name()))),
+                        TransformBundle {
                             local: Transform::from_translation(geometry.pos).with_rotation(
                                 Quat::from_rotation_x(geometry.rotation.x) *
                                 Quat::from_rotation_y(geometry.rotation.y) *
                                 Quat::from_rotation_z(geometry.rotation.z)
                             ),
                             ..TransformBundle::default()
-                        })
-                        .insert(Name::new(geometry.label.as_ref().cloned().unwrap_or(format!("unnamed {}", geometry.shape.name()))))
-                        .add_children(|parent| {
+                        },
+                        VisibilityBundle::default(),
+                    )).add_children(|parent| {
                             for texname in geometry.materials.iter() {
                                 let (material, texmat) = if texname == "background" {
                                     (background.material.clone(), &background_texmat)
@@ -217,41 +233,37 @@ pub fn spawn_room(
                                 let mesh = meshes.add((match geometry.shape.clone() {
                                     Shape::Quad { w, h, d, one_sided } => Shape::Quad { w, h, d: d + layer_offset, one_sided },
                                     s => s,
-                                }).mk_mesh(&asset_server, &texmat, Vec3::Z * layer_offset / 2., AtlasIndex::default()));
-                                parent.spawn()
-                                    .insert(InRoom { room: room_name.clone() })
-                                    .insert_bundle(PbrBundle {
-                                        mesh,
-                                        material,
-                                        //transform: Transform::from_translation(geometry.offset + Vec3::Z * layer_offset / 2.),//.with_scale(Vec3::splat(layer_offset + 1.)),
-                                        ..default()
-                                    });
+                                }).mk_mesh(&texmat, Vec3::Z * layer_offset / 2., AtlasIndex::default()));
+                                parent.spawn((
+                                    InRoom { room: room_name.clone() },
+                                    PbrBundle { mesh, material, ..default() },
+                                ));
                                 layer_offset += 0.001;
                             }
                         });
                 }
 
                 for light in room.lights.iter() {
-                    let mut light_builder = parent.spawn();
-                    light.insert_bundle(&mut light_builder, Vec3::ZERO);
+                    let mut light_builder = parent.spawn_empty();
+                    light.insert(&mut light_builder, Vec3::ZERO);
                 }
 
                 for prefab in room.prefabs.iter() {
                     if prefab.room_child {
                         let path = fix_missing_extension::<PrefabLoader>(prefab.asset.clone());
-                        parent.spawn()
-                            .insert_bundle(TransformBundle {
+                        parent.spawn((
+                            Name::new(prefab.label.as_ref().cloned().unwrap_or(format!("unnamed {}", prefab.asset))),
+                            prefab.script_vars.clone(),
+                            ToInitHandle::<Prefab>::new(asset_server.load(&path)),
+                            TransformBundle {
                                 local: Transform::from_translation(match prefab.at {
                                     PrefabLocation::Free(v) => v,
                                     _ => { unimplemented!() },
                                 }).with_rotation(Quat::from_euler(EulerRot::XYZ, prefab.rotation.x, prefab.rotation.y, prefab.rotation.z)),
                                 ..default()
-                            })
-                            .insert_bundle(VisibilityBundle::default())
-                            .insert(ToInitHandle::<Prefab>::new(asset_server.load(&path)))
-                            .insert(prefab.script_vars.clone())
-                            .insert(Name::new(prefab.label.as_ref().cloned().unwrap_or(format!("unnamed {}", prefab.asset))))
-                            .insert_if(prefab.attributes.is_some(), || prefab.attributes.as_ref().unwrap().clone());
+                            },
+                            VisibilityBundle::default(),
+                        )).insert_if(prefab.attributes.is_some(), || prefab.attributes.as_ref().unwrap().clone());
                     } else {
                         todo!();
                     }
@@ -262,13 +274,14 @@ pub fn spawn_room(
             let mut args = HashMap::<String, ScriptVar>::new();
             args.insert("name".into(), room_name.clone().into());
             args.insert("entity".into(), room_entity.clone().into());
-            commands.entity(room_entity).insert(AwaitScript {
-                script_ids: waiting_scripts.clone(),
-                event: LuaEvent {
-                    hook_name: ON_ROOM_REVEAL.into(),
-                    args: (args,).into(),
-                    recipients: Recipients::All,
-                },
+            commands.entity(room_entity).insert(LuaQueue {
+                calls: vec![HookCall {
+                    script_ids: waiting_scripts.clone(),
+                    hook: Hook {
+                        name: ON_ROOM_REVEAL.into(),
+                        args: (args,).into(),
+                    },
+                }]
             });
         }
     }

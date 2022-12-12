@@ -27,20 +27,19 @@
             ],
         ),
         parts: {
-            "bkg": Sprite(bone: (name: "root"), layer: Background, shape: Quad(w: 0.771, h: 1.3), material: "bkg", atlas_offset: (row: 1, col: 0)),
-            "out": Sprite(bone: (name: "root"), layer: Outline,    shape: Quad(w: 0.771, h: 1.3), material: "out"),
+            "bkg": Sprite(bone: (name: "root"), shape: Quad(w: 0.771, h: 1.3), material: "bkg", atlas_offset: (row: 1, col: 0)),
+            "out": Sprite(bone: (name: "root"), shape: Quad(w: 0.771, h: 1.3), material: "out"),
         },
         materials: {
             // implicit "background" material that is a fill of the current background
             "out": (
-                layer:            Outline,
-                color:            "#f64560",
+                color:            "sierra",
                 texture:          "chars/labolas_dnc.png",
                 atlas:            (rows: 2, columns: 6, width: 204, height: 344),
                 alpha_blend:      true,
             ),
             "bkg": (
-                layer:            Background,
+                color:            "background",
                 texture:          "chars/labolas_dnc.png",
                 atlas:            (rows: 2, columns: 6, width: 204, height: 344),
                 alpha_blend:      true,

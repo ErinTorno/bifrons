@@ -1,11 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
 use bevy::{prelude::*, asset::{LoadContext, AssetLoader, LoadedAsset}, utils::BoxedFuture, reflect::TypeUuid};
-use bevy_mod_scripting::{lua::api::bevy::{LuaWorld, LuaEntity}};
 use mlua::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::{scripting::{LuaScriptVars, LuaMod, LuaHandle, random::random_range}, system::common::fix_missing_extension};
+use crate::{scripting::{LuaMod, random::random_range, bevy_api::handle::LuaHandle}, system::common::fix_missing_extension};
+
+use super::lua::{LuaWorld, LuaScriptVars};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RolledRow {
@@ -276,13 +277,6 @@ impl LuaUserData for FormList {
 impl LuaMod for FormList {
     fn mod_name() -> &'static str { "FormList" }
     fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
-        table.set("handle_of", lua.create_function(|ctx, entity: LuaEntity| {
-            let world = ctx.globals().get::<_, LuaWorld>("world").unwrap();
-            let w = world.read();
-            if let Some(handle) = w.get::<Handle<FormList>>(entity.inner()?) {
-                Ok(Some(LuaHandle::from(handle.clone())))
-            } else { Ok(None) }
-        })?)?;
         table.set("load", lua.create_function(|lua, path: String| {
             let path = fix_missing_extension::<FormListLoader>(path);
             let world = lua.globals().get::<_, LuaWorld>("world").unwrap();

@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-use std::default::default;
+use std::{default::default, collections::HashMap};
 
 use serde::{Deserialize, Serialize};
 

@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 
-use bevy_mod_scripting::lua::api::bevy::LuaWorld;
+use bevy::{prelude::Resource};
 use mlua::prelude::*;
+use crate::data::lua::LuaWorld;
+
 use super::LuaMod;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Resource)]
 pub struct Registry {
     pub keys: HashMap<String, LuaRegistryKey>,
 }

@@ -1,11 +1,12 @@
 use std::{collections::HashMap, ops::{Add, Sub, Mul, Div}};
 
 use bevy::prelude::*;
-use bevy_mod_scripting::lua::api::bevy::{LuaEntity, LuaWorld};
 use mlua::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::scripting::LuaMod;
+use crate::scripting::{LuaMod, bevy_api::LuaEntity};
+
+use super::lua::LuaWorld;
 
 #[derive(Clone, Component, Debug, Default, Deserialize, Serialize)]
 pub struct Attributes {
@@ -45,7 +46,7 @@ impl LuaMod for Stat {
             Ok(Stat { base, modifier: 0. })
         })?)?;
         table.set("get", lua.create_function(|ctx, (entity, statname): (LuaEntity, String)| {
-            if let Some(ent) = ctx.globals().get::<_, LuaWorld>("world").unwrap().read().get_entity(entity.inner()?) {
+            if let Some(ent) = ctx.globals().get::<_, LuaWorld>("world").unwrap().read().get_entity(entity.0) {
                 if let Some(attributes) = ent.get::<Attributes>() {
                     return Ok(attributes.stats.get(&statname).cloned());
                 }
@@ -53,7 +54,7 @@ impl LuaMod for Stat {
             Ok(None)
         })?)?;
         table.set("set", lua.create_function(|ctx, (entity, statname, stat): (LuaEntity, String, Stat)| {
-            if let Some(mut ent) = ctx.globals().get::<_, LuaWorld>("world").unwrap().write().get_entity_mut(entity.inner()?) {
+            if let Some(mut ent) = ctx.globals().get::<_, LuaWorld>("world").unwrap().write().get_entity_mut(entity.0) {
                 if let Some(mut attributes) = ent.get_mut::<Attributes>() {
                     attributes.stats.insert(statname, stat);
                 }
@@ -61,7 +62,7 @@ impl LuaMod for Stat {
             Ok(())
         })?)?;
         table.set("total", lua.create_function(|ctx, (entity, statname): (LuaEntity, String)| {
-            if let Some(ent) = ctx.globals().get::<_, LuaWorld>("world").unwrap().read().get_entity(entity.inner()?) {
+            if let Some(ent) = ctx.globals().get::<_, LuaWorld>("world").unwrap().read().get_entity(entity.0) {
                 if let Some(attributes) = ent.get::<Attributes>() {
                     return Ok(attributes.stats.get(&statname).map(Stat::total));
                 }
@@ -138,7 +139,7 @@ impl LuaMod for Pool {
             Ok(Pool { base, modifier: 0., current: base })
         })?)?;
         table.set("get", lua.create_function(|ctx, (entity, name): (LuaEntity, String)| {
-            if let Some(ent) = ctx.globals().get::<_, LuaWorld>("world").unwrap().read().get_entity(entity.inner()?) {
+            if let Some(ent) = ctx.globals().get::<_, LuaWorld>("world").unwrap().read().get_entity(entity.0) {
                 if let Some(attributes) = ent.get::<Attributes>() {
                     return Ok(attributes.stats.get(&name).cloned());
                 }
@@ -146,7 +147,7 @@ impl LuaMod for Pool {
             Ok(None)
         })?)?;
         table.set("set", lua.create_function(|ctx, (entity, name, pool): (LuaEntity, String, Pool)| {
-            if let Some(mut ent) = ctx.globals().get::<_, LuaWorld>("world").unwrap().write().get_entity_mut(entity.inner()?) {
+            if let Some(mut ent) = ctx.globals().get::<_, LuaWorld>("world").unwrap().write().get_entity_mut(entity.0) {
                 if let Some(mut attributes) = ent.get_mut::<Attributes>() {
                     attributes.pools.insert(name, pool);
                 }
@@ -154,7 +155,7 @@ impl LuaMod for Pool {
             Ok(())
         })?)?;
         table.set("current", lua.create_function(|ctx, (entity, name): (LuaEntity, String)| {
-            if let Some(ent) = ctx.globals().get::<_, LuaWorld>("world").unwrap().read().get_entity(entity.inner()?) {
+            if let Some(ent) = ctx.globals().get::<_, LuaWorld>("world").unwrap().read().get_entity(entity.0) {
                 if let Some(attributes) = ent.get::<Attributes>() {
                     return Ok(attributes.pools.get(&name).map(|p| p.current));
                 }
@@ -162,7 +163,7 @@ impl LuaMod for Pool {
             Ok(None)
         })?)?;
         table.set("cap", lua.create_function(|ctx, (entity, name): (LuaEntity, String)| {
-            if let Some(ent) = ctx.globals().get::<_, LuaWorld>("world").unwrap().read().get_entity(entity.inner()?) {
+            if let Some(ent) = ctx.globals().get::<_, LuaWorld>("world").unwrap().read().get_entity(entity.0) {
                 if let Some(attributes) = ent.get::<Attributes>() {
                     return Ok(attributes.pools.get(&name).map(Pool::cap));
                 }
@@ -170,7 +171,7 @@ impl LuaMod for Pool {
             Ok(None)
         })?)?;
         table.set("ratio", lua.create_function(|ctx, (entity, name): (LuaEntity, String)| {
-            if let Some(ent) = ctx.globals().get::<_, LuaWorld>("world").unwrap().read().get_entity(entity.inner()?) {
+            if let Some(ent) = ctx.globals().get::<_, LuaWorld>("world").unwrap().read().get_entity(entity.0) {
                 if let Some(attributes) = ent.get::<Attributes>() {
                     return Ok(attributes.pools.get(&name).map(|p| p.ratio()));
                 }

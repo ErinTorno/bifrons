@@ -1,14 +1,13 @@
-use std::{collections::HashMap, path::{PathBuf}};
+use std::{path::{PathBuf}};
 
-use bevy::{prelude::*, render::{render_resource::{AddressMode, SamplerDescriptor, FilterMode}, texture::ImageSampler}};
-use bevy_inspector_egui::Inspectable;
-use bevy_mod_scripting::{lua::api::bevy::{LuaWorld, LuaEntity}};
+use bevy::{prelude::*, render::{render_resource::{AddressMode, SamplerDescriptor, FilterMode}, texture::ImageSampler}, utils::{HashMap, HashSet}};
+use bevy_inspector_egui::prelude::*;
 use mlua::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::{util::serialize::*, scripting::{LuaMod, color::RgbaColor, LuaHandle}};
+use crate::{scripting::{LuaMod, color::RgbaColor, bevy_api::{LuaEntity, handle::LuaHandle}}};
 
-use super::anim::{ColorLayer};
+use super::{lua::{LuaWorld, Any2}, palette::{DynColor}};
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub enum RepeatType {
@@ -118,7 +117,7 @@ impl LuaMod for Atlas {
     }
 }
 
-#[derive(Clone, Component, Debug, Default, Inspectable)]
+#[derive(Clone, Component, Debug, Default, InspectorOptions)]
 pub struct LoadedMaterials {
     pub by_name: HashMap<String, Handle<StandardMaterial>>,
 }
@@ -142,32 +141,28 @@ pub fn resolve_and_load_texture(file: &String, asset_server: &AssetServer) -> Ha
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TextureMaterial {
-    #[serde(default)]
-    pub layer:   ColorLayer,
-    pub texture: String,
+    pub texture:          String,
     #[serde(default)]
     pub normal_texture:   Option<String>,
     #[serde(default)]
     pub emissive_texture: Option<String>,
-    #[serde(default = "default_emissive_color", deserialize_with = "deserialize_hex_color", serialize_with = "serialize_hex_color")]
-    pub emissive_color: Color,
+    #[serde(default = "default_emissive_color")]
+    pub emissive_color:   DynColor,
     #[serde(default)]
-    pub atlas:   Option<Atlas>,
+    pub atlas:            Option<Atlas>,
     #[serde(default)]
-    pub mode:    MaterialMode,
-    #[serde(default = "default_color", deserialize_with = "deserialize_hex_color", serialize_with = "serialize_hex_color")]
-    pub color:   Color,
+    pub mode:             MaterialMode,
+    pub color:            DynColor,
     #[serde(default = "default_metallic")]
-    pub metallic:    f32,
+    pub metallic:         f32,
     #[serde(default = "default_reflectance")]
-    pub reflectance: f32,
+    pub reflectance:      f32,
     #[serde(default = "default_alpha_blend")]
-    pub alpha_blend: bool,
+    pub alpha_blend:      bool,
     #[serde(default)]
-    pub unlit:       bool,
+    pub unlit:            bool,
 }
-fn default_color() -> Color { Color::WHITE }
-fn default_emissive_color() -> Color { Color::BLACK }
+fn default_emissive_color() -> DynColor { DynColor::Const(RgbaColor {r: 0., g: 0., b: 0., a: 1.}) }
 fn default_metallic() -> f32 { 0.5 }
 fn default_reflectance() -> f32 { 0.5 }
 fn default_alpha_blend() -> bool { false }
@@ -180,7 +175,12 @@ impl TextureMaterial {
         }
     }
 
-    pub fn load_material(&self, asset_server: &AssetServer, tex_mat_info: &mut TexMatInfo, materials: &mut Assets<StandardMaterial>) -> Handle<StandardMaterial> {
+    pub fn load_material(
+        &self,
+        asset_server: &AssetServer,
+        tex_mat_info: &mut TexMatInfo,
+        materials: &mut Assets<StandardMaterial>,
+    ) -> Handle<StandardMaterial> {
         let handles = self.load_textures(&asset_server);
         let handle = materials.add(self.make_material(handles, tex_mat_info));
         tex_mat_info.materials.insert(handle.clone(), self.clone());
@@ -198,12 +198,10 @@ impl TextureMaterial {
         }));
         StandardMaterial {
             base_color_texture: Some(handles.texture),
-            base_color: self.color,
-            emissive: self.emissive_color,
             emissive_texture: handles.emissive,
             normal_map_texture: handles.normal,
             alpha_mode: if self.alpha_blend { AlphaMode::Blend } else { AlphaMode::Mask(0.05) }, // hack-hack until Bevy bug with AlphaMode::Blend render orders
-            unlit: self.unlit || self.layer == ColorLayer::Background,
+            unlit: self.unlit || self.color == DynColor::Background,
             metallic: self.metallic,
             reflectance: self.reflectance,
             // double_sided: true,
@@ -223,12 +221,11 @@ impl TextureMaterial {
     }
 
     pub const BACKGROUND: TextureMaterial = TextureMaterial {
-        layer: ColorLayer::Background,
         texture: String::new(),
         normal_texture: None,
         mode: MaterialMode::Stretch,
-        color: Color::WHITE,
-        emissive_color: Color::BLACK,
+        color: DynColor::Background,
+        emissive_color: DynColor::CONST_BLACK,
         emissive_texture: None,
         metallic: 0.,
         reflectance: 0.,
@@ -237,12 +234,11 @@ impl TextureMaterial {
         unlit: true,
     };
     pub const MISSING: TextureMaterial = TextureMaterial {
-        layer: ColorLayer::NoChange,
         texture: String::new(),
         normal_texture: None,
         mode: MaterialMode::Stretch,
-        color:          Color::rgb(1., 0., 0.615),
-        emissive_color: Color::BLACK,
+        color:          DynColor::Const(RgbaColor {r: 1., g: 0., b: 0.5, a: 1.}),
+        emissive_color: DynColor::CONST_BLACK,
         emissive_texture: None,
         metallic: 0.6,
         reflectance: 0.8,
@@ -255,21 +251,16 @@ impl LuaUserData for TextureMaterial {
     fn add_fields<'lua, F: mlua::UserDataFields<'lua, Self>>(fields: &mut F) {
         fields.add_field_method_get("atlas", |_, this| Ok(this.atlas.clone()));
         fields.add_field_method_set("atlas", |_, this, atlas| Ok(this.atlas = atlas));
-        fields.add_field_method_get("color", |_, this| Ok(RgbaColor::from(this.color)));
-        fields.add_field_method_set("color", |_, this, color: RgbaColor| Ok(this.color = color.into()));
-        fields.add_field_method_get("emissive_color", |_, this| Ok(RgbaColor::from(this.emissive_color)));
-        fields.add_field_method_set("emissive_color", |_, this, color: RgbaColor| Ok(this.emissive_color = color.into()));
-        fields.add_field_method_get("layer", |_, this| match this.layer {
-            ColorLayer::Background => Ok("background".to_string()),
-            ColorLayer::NoChange =>   Ok("nochange".to_string()),
-            ColorLayer::Outline =>    Ok("outline".to_string()),
-        });
-        fields.add_field_method_set("layer", |_, this, str: String| match str.as_str() {
-            "background" => Ok(this.layer = ColorLayer::Background),
-            "nochange"   => Ok(this.layer = ColorLayer::NoChange),
-            "outline"    => Ok(this.layer = ColorLayer::Outline),
-            _            => Err(LuaError::RuntimeError(format!("No ColorLayer matched for \"{}\"", str))),
-        });
+        fields.add_field_method_get("color", |_, this| Ok(this.color.clone()));
+        fields.add_field_method_set("color", |_, this, any: Any2<DynColor, RgbaColor>| Ok(match any {
+            Any2::A(c) => { this.color = c },
+            Any2::B(c) => { this.color = DynColor::Custom(c) },
+        }));
+        fields.add_field_method_get("emissive_color", |_, this| Ok(this.emissive_color.clone()));
+        fields.add_field_method_set("emissive_color", |_, this, any: Any2<DynColor, RgbaColor>| Ok(match any {
+            Any2::A(c) => { this.emissive_color = c },
+            Any2::B(c) => { this.emissive_color = DynColor::Custom(c) },
+        }));
         fields.add_field_method_get("metallic", |_, this| Ok(this.metallic));
         fields.add_field_method_set("metallic", |_, this, metallic| Ok(this.metallic = metallic));
         fields.add_field_method_get("reflectance", |_, this| Ok(this.reflectance));
@@ -344,14 +335,14 @@ impl LuaMod for TextureMaterial {
         table.set("handle_of", lua.create_function(|ctx, entity: LuaEntity| {
             let world = ctx.globals().get::<_, LuaWorld>("world").unwrap();
             let w = world.read();
-            if let Some(handle) = w.get::<Handle<StandardMaterial>>(entity.inner()?) {
+            if let Some(handle) = w.get::<Handle<StandardMaterial>>(entity.0) {
                 Ok(Some(LuaHandle::from(handle.clone())))
             } else { Ok(None) }
         })?)?;
         table.set("handle_table", lua.create_function(|ctx, entity: LuaEntity| {
             let world = ctx.globals().get::<_, LuaWorld>("world").unwrap();
             let w = world.read();
-            let entity = entity.inner()?;
+            let entity = entity.0;
             if let Some(mats) = w.get::<LoadedMaterials>(entity) {
                 let table = ctx.create_table()?;
                 for (name, handle) in mats.by_name.iter() {
@@ -360,7 +351,6 @@ impl LuaMod for TextureMaterial {
                 Ok(Some(table))
             } else { Ok(None) }
         })?)?;
-        
         Ok(())
     }
 }
@@ -372,8 +362,22 @@ pub struct TextureHandles {
     pub emissive: Option<Handle<Image>>,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Resource)]
 pub struct TexMatInfo {
     pub materials: HashMap<Handle<StandardMaterial>, TextureMaterial>,
     pub samplers:  HashMap<Handle<Image>, ImageSampler>,
 }
+
+#[derive(Clone, Debug)]
+pub struct LoadedMat {
+    pub handle:  Handle<StandardMaterial>,
+    pub tex_mat: TextureMaterial,
+}
+
+#[derive(Clone, Debug, Default, Resource)]
+pub struct MaterialColors {
+    pub by_handle: HashMap<Handle<StandardMaterial>, LoadedMat>,
+}
+
+#[derive(Clone, Debug, Default, Resource)]
+pub struct MaterialsToInit(pub HashSet<Handle<StandardMaterial>>);

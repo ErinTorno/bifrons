@@ -1,14 +1,13 @@
 use std::{f32::consts::FRAC_PI_4};
 
 use bevy::{prelude::*, render::{mesh::{Mesh, Indices}, render_resource::{PrimitiveTopology}}, ecs::{system::{EntityCommands}, world::EntityMut}};
-use bevy_inspector_egui::Inspectable;
-use bevy_mod_scripting::lua::api::bevy::{LuaVec3, LuaWorld, LuaEntity};
+use bevy_inspector_egui::prelude::*;
 use mlua::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::{util::serialize::*, scripting::{color::RgbaColor, LuaMod}};
+use crate::{scripting::{color::RgbaColor, LuaMod, bevy_api::{math::LuaVec3, LuaEntity}}};
 
-use super::{material::*};
+use super::{material::*, lua::{LuaWorld, Any2}, palette::DynColor};
 
 #[derive(Clone, Debug)]
 pub struct AnimatedMesh {
@@ -87,7 +86,7 @@ impl Shape {
         }
     }
 
-    pub fn mk_mesh(&self, asset_server: &AssetServer, mat: &TextureMaterial, offset: Vec3, idx: AtlasIndex) -> Mesh {
+    pub fn mk_mesh(&self, mat: &TextureMaterial, offset: Vec3, idx: AtlasIndex) -> Mesh {
         let mut builder = MeshBuilder::default();
         let [uv_left, uv_right, uv_top, uv_bottom] = mat.get_uvs(idx);
         match self {
@@ -410,7 +409,7 @@ impl LuaUserData for LightKind {
         });
         fields.add_field_method_set("target", |_, this, new_target: LuaVec3| match this {
             LightKind::SpotLight { ref mut target, ..} => {
-                *target = new_target.inner()?;
+                *target = new_target.0;
                 Ok(())
             },
             _ => Err(LuaError::UserDataTypeMismatch),
@@ -438,20 +437,27 @@ impl LuaMod for LightKind {
         })?)?;
         table.set("spotlight", lua.create_function(|_ctx, (target, intensity, range, radius, inner_angle, outer_angle)| {
             let target: LuaVec3 = target;
-            Ok(LightKind::SpotLight { target: target.inner()?, intensity, range, radius, inner_angle, outer_angle })
+            Ok(LightKind::SpotLight { target: target.0, intensity, range, radius, inner_angle, outer_angle })
         })?)?;
         table.set("default_spotlight", lua.create_function(|_ctx, target: LuaVec3| {
-            Ok(LightKind::default_spotlight(target.inner()?))
+            Ok(LightKind::default_spotlight(target.0))
         })?)?;
         Ok(())
     }
 }
 
-#[derive(Clone, Component, Copy, Debug, Deserialize, Inspectable, PartialEq, Reflect, Serialize)]
-#[reflect(Component)]
+#[derive(Clone, Component, Copy, Debug, Deserialize, InspectorOptions, PartialEq, Reflect, Serialize)]
+#[reflect(Component, InspectorOptions)]
 pub enum LightAnim {
-    Constant { mul: f32 },
-    Sin { period: f32, amplitude: f32, #[serde(default)] phase_shift: f32 },
+    Constant {
+        mul: f32,
+    },
+    Sin {
+        period: f32,
+        amplitude: f32,
+        #[serde(default)] 
+        phase_shift: f32,
+    },
 }
 impl Default for LightAnim {
     fn default() -> Self {
@@ -483,8 +489,8 @@ impl LuaMod for LightAnim {
         Ok(())
     }
 }
-#[derive(Clone, Component, Copy, Debug, Default, Deserialize, Inspectable, PartialEq, Reflect, Serialize)]
-#[reflect(Component)]
+#[derive(Clone, Component, Copy, Debug, Default, Deserialize, InspectorOptions, PartialEq, Reflect, Serialize)]
+#[reflect(Component, InspectorOptions)]
 pub struct LightAnimState {
     pub base_value: f32,
 }
@@ -495,8 +501,7 @@ pub struct Light {
     pub label: Option<String>,
     pub pos:   Vec3,
     pub kind:  LightKind,
-    #[serde(default = "default_color", deserialize_with = "deserialize_hex_color", serialize_with = "serialize_hex_color")]
-    pub color: Color,
+    pub color: DynColor,
     #[serde(default = "default_shadows_enabled")]
     pub shadows_enabled: bool,
     #[serde(default = "default_shadow_depth_bias")]
@@ -506,7 +511,7 @@ pub struct Light {
     #[serde(default)]
     pub anim: LightAnim,
 }
-fn default_color() -> Color { Color::WHITE }
+fn default_color() -> DynColor { DynColor::Const(RgbaColor::WHITE) }
 fn default_shadows_enabled() -> bool { true }
 pub fn default_shadow_depth_bias() -> f32 { 0.02 }
 pub fn default_shadow_normal_bias() -> f32 { 0.6 }
@@ -525,15 +530,15 @@ impl Default for Light {
     }
 }
 impl Light {
-    pub fn insert_bundle(&self, commands: &mut EntityCommands, offset: Vec3) {
+    pub fn insert(&self, commands: &mut EntityCommands, offset: Vec3) {
         match self.kind {
             LightKind::Point { intensity, range, radius } => {
-                commands.insert_bundle(PointLightBundle {
+                commands.insert(PointLightBundle {
                     point_light: PointLight {
                         intensity,
                         range,
                         radius,
-                        color: self.color,
+                        color: self.color.placeholder(),
                         shadows_enabled: self.shadows_enabled,
                         shadow_depth_bias: self.shadow_depth_bias,
                         shadow_normal_bias: self.shadow_normal_bias,
@@ -543,14 +548,14 @@ impl Light {
                 });
             },
             LightKind::SpotLight { target, intensity, range, radius, inner_angle, outer_angle } => {
-                commands.insert_bundle(SpotLightBundle {
+                commands.insert(SpotLightBundle {
                     spot_light: SpotLight {
                         intensity,
                         range,
                         radius,
                         outer_angle,
                         inner_angle,
-                        color: self.color,
+                        color: self.color.placeholder(),
                         shadows_enabled: self.shadows_enabled,
                         shadow_depth_bias: self.shadow_depth_bias,
                         shadow_normal_bias: self.shadow_normal_bias,
@@ -560,10 +565,10 @@ impl Light {
                 });
             },
             LightKind::Directional { illuminance, length } => {
-                commands.insert_bundle(DirectionalLightBundle {
+                commands.insert(DirectionalLightBundle {
                     directional_light: DirectionalLight {
                         illuminance,
-                        color: self.color,
+                        color: self.color.placeholder(),
                         shadows_enabled: self.shadows_enabled,
                         shadow_depth_bias: self.shadow_depth_bias,
                         shadow_normal_bias: self.shadow_normal_bias,
@@ -582,23 +587,25 @@ impl Light {
                 });
             },
         }
-        commands.insert(self.clone());
-        commands.insert(self.anim);
-        commands.insert(LightAnimState { base_value: self.kind.value() });
+        commands.insert((
+            self.clone(),
+            self.anim,
+            LightAnimState { base_value: self.kind.value() },
+        ));
         if let Some(label) = &self.label {
             commands.insert(Name::new(label.clone()));
         }
     }
 
-    pub fn insert_bundle_mut(&self, entity: &mut EntityMut, offset: Vec3) {
+    pub fn insert_mut(&self, entity: &mut EntityMut, offset: Vec3) {
         match self.kind {
             LightKind::Point { intensity, range, radius } => {
-                entity.insert_bundle(PointLightBundle {
+                entity.insert(PointLightBundle {
                     point_light: PointLight {
                         intensity,
                         range,
                         radius,
-                        color: self.color,
+                        color: self.color.placeholder(),
                         shadows_enabled: self.shadows_enabled,
                         shadow_depth_bias: self.shadow_depth_bias,
                         shadow_normal_bias: self.shadow_normal_bias,
@@ -608,14 +615,14 @@ impl Light {
                 });
             },
             LightKind::SpotLight { target, intensity, range, radius, inner_angle, outer_angle } => {
-                entity.insert_bundle(SpotLightBundle {
+                entity.insert(SpotLightBundle {
                     spot_light: SpotLight {
                         intensity,
                         range,
                         radius,
                         outer_angle,
                         inner_angle,
-                        color: self.color,
+                        color: self.color.placeholder(),
                         shadows_enabled: self.shadows_enabled,
                         shadow_depth_bias: self.shadow_depth_bias,
                         shadow_normal_bias: self.shadow_normal_bias,
@@ -625,10 +632,10 @@ impl Light {
                 });
             },
             LightKind::Directional { illuminance, length } => {
-                entity.insert_bundle(DirectionalLightBundle {
+                entity.insert(DirectionalLightBundle {
                     directional_light: DirectionalLight {
                         illuminance,
-                        color: self.color,
+                        color: self.color.placeholder(),
                         shadows_enabled: self.shadows_enabled,
                         shadow_depth_bias: self.shadow_depth_bias,
                         shadow_normal_bias: self.shadow_normal_bias,
@@ -662,11 +669,11 @@ impl LuaUserData for Light {
             this.anim = anim;
             Ok(())
         });
-        fields.add_field_method_get("color", |_, this| Ok(<Color as Into<RgbaColor>>::into(this.color.clone())));
-        fields.add_field_method_set("color", |_, this, color: RgbaColor| {
-            this.color = color.into();
-            Ok(())
-        });
+        fields.add_field_method_get("color", |_, this| Ok(this.color.clone()));
+        fields.add_field_method_set("color", |_, this, any: Any2<DynColor, RgbaColor>| Ok(match any {
+            Any2::A(c) => { this.color = c },
+            Any2::B(c) => { this.color = DynColor::Custom(c) },
+        }));
         fields.add_field_method_get("label", |_, this| Ok(this.label.clone()));
         fields.add_field_method_set("label", |_, this, label: Option<String>| {
             this.label = label;
@@ -674,7 +681,7 @@ impl LuaUserData for Light {
         });
         fields.add_field_method_get("pos", |_, this| Ok(LuaVec3::new(this.pos.clone())));
         fields.add_field_method_set("pos", |_, this, pos: LuaVec3| {
-            this.pos = pos.inner()?;
+            this.pos = pos.0;
             Ok(())
         });
         fields.add_field_method_get("shadow_depth_bias", |_, this| Ok(this.shadow_depth_bias.clone()));
@@ -699,15 +706,15 @@ impl LuaUserData for Light {
         methods.add_method("spawn", |ctx, this, ()| {
             let world = ctx.globals().get::<_, LuaWorld>("world").unwrap();
             let mut write = world.write();
-            let mut entity = write.spawn();
-            this.insert_bundle_mut(&mut entity, Vec3::ZERO);
+            let mut entity = write.spawn_empty();
+            this.insert_mut(&mut entity, Vec3::ZERO);
             Ok(LuaEntity::new(entity.id()))
         });
         methods.add_method("apply", |ctx, this, entity: LuaEntity| {
             let world = ctx.globals().get::<_, LuaWorld>("world").unwrap();
             let mut write = world.write();
-            let mut entity = write.entity_mut(entity.inner()?);
-            this.insert_bundle_mut(&mut entity, Vec3::ZERO);
+            let mut entity = write.entity_mut(entity.0);
+            this.insert_mut(&mut entity, Vec3::ZERO);
             Ok(LuaEntity::new(entity.id()))
         });
     }
@@ -716,7 +723,7 @@ impl LuaMod for Light {
     fn mod_name() -> &'static str { "Light" }
     fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
         table.set("of", lua.create_function(|ctx, entity: LuaEntity| {
-            if let Some(ent) = ctx.globals().get::<_, LuaWorld>("world").unwrap().write().get_entity(entity.inner()?) {
+            if let Some(ent) = ctx.globals().get::<_, LuaWorld>("world").unwrap().write().get_entity(entity.0) {
                 Ok(ent.get::<Light>().cloned())
             } else { Ok(None) }
         })?)?;
@@ -725,7 +732,7 @@ impl LuaMod for Light {
                 label: None,
                 pos:   Vec3::ZERO,
                 kind,
-                color: Color::WHITE,
+                color: DynColor::Named("white".to_string()),
                 shadows_enabled: default_shadows_enabled(),
                 shadow_depth_bias: default_shadow_depth_bias(),
                 shadow_normal_bias: default_shadow_normal_bias(),

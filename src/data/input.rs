@@ -1,12 +1,11 @@
 use std::{cmp::*, collections::HashMap, hash::Hash};
 
 use bevy::prelude::*;
-use bevy_inspector_egui::Inspectable;
-use bevy_mod_scripting::lua::api::bevy::LuaVec2;
+use bevy_inspector_egui::prelude::*;
 use mlua::prelude::*;
 use serde::*;
 
-use crate::{scripting::LuaMod, util::Timestamped};
+use crate::{scripting::{LuaMod, bevy_api::math::LuaVec2}, util::Timestamped};
 
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -32,7 +31,7 @@ pub enum InputCode {
     Joystick    { side: JoystickSide, angle: f32, sensitivity: f32 },
 }
 
-#[derive(Clone, Debug, Inspectable, PartialEq)]
+#[derive(Clone, Debug, InspectorOptions, PartialEq)]
 pub enum InputData {
     Binary      { pressed: bool },
     Analog      { state: f32, },
@@ -71,7 +70,7 @@ impl Default for InputData {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Inspectable, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, InspectorOptions, PartialEq)]
 pub enum InputTime {
     #[default]
     NotPressed,
@@ -120,7 +119,7 @@ impl InputTime {
         }
     }
 
-    pub fn from_input<T>(input: &Input<T>, code: T, secs: f64) -> InputTime where T: Copy + Eq + Hash {
+    pub fn from_input<T>(input: &Input<T>, code: T, secs: f64) -> InputTime where T: Copy + Eq + Hash + Send + Sync {
         if input.just_pressed(code) {
             InputTime::JustPressed { secs } // todo get analog control state
         } else if input.just_released(code) {
@@ -133,7 +132,7 @@ impl InputTime {
     }
 }
 
-#[derive(Clone, Debug, Default, Inspectable, PartialEq)]
+#[derive(Clone, Debug, Default, InspectorOptions, PartialEq)]
 pub struct InputTS {
     pub data: InputData,
     pub time: InputTime,
@@ -145,7 +144,6 @@ impl InputTS {
         } else if other.time == InputTime::NotPressed || other.data.is_empty() {
             self
         } else {
-            let time = self.time.combine(other.time);
             match self.time.cmp_secs(&other.time) {
                 Ordering::Equal => {
                     let sp = self.data.power().abs();
@@ -250,7 +248,7 @@ impl LuaUserData for InputTS {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Inspectable, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, InspectorOptions, PartialEq)]
 pub enum CameraType {
     #[default]
     Following, // follows the player
@@ -267,7 +265,7 @@ impl CameraType {
     }
 }
 
-#[derive(Clone, Component, Debug, Default, Inspectable, PartialEq)]
+#[derive(Clone, Component, Debug, Default, InspectorOptions, PartialEq)]
 pub struct ActionState {
     pub gamepad_id: Option<usize>,
     pub camera:     CameraType,
@@ -292,7 +290,7 @@ impl LuaUserData for ActionState {
 }
 impl LuaMod for ActionState {
     fn mod_name() -> &'static str { "Action" }
-    fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
+    fn register_defs(_lua: &Lua, _table: &mut LuaTable) -> Result<(), mlua::Error> {
         Ok(())
     }
 }

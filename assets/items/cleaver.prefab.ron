@@ -19,12 +19,11 @@ Prefab(
         },
         skeleton: (name: "root"),
         parts: {
-            "bkg":  Sprite(bone: (name: "root"), layer: Background, shape: Quad(w: 0.177, h: 0.4), material: "bkg",  atlas_offset: (row: 0, col: 1)),
-            "out":  Sprite(bone: (name: "root"), layer: Outline,    shape: Quad(w: 0.177, h: 0.4), material: "out"),
+            "bkg": Sprite(bone: (name: "root"), shape: Quad(w: 0.177, h: 0.4), material: "bkg",  atlas_offset: (row: 0, col: 1)),
+            "out": Sprite(bone: (name: "root"), shape: Quad(w: 0.177, h: 0.4), material: "out"),
         },
         materials: {
             "out": (
-                layer:            Outline,
                 color:            "#9cabb1",
                 texture:          "items/cleaver.png",
                 alpha_blend:      true,
@@ -32,7 +31,7 @@ Prefab(
                 metallic:         0.9,
             ),
             "bkg": (
-                layer:            Background,
+                color:            "background",
                 texture:          "items/cleaver.png",
                 alpha_blend:      true,
                 atlas:            (rows: 1, columns: 2, width: 430, height: 768),

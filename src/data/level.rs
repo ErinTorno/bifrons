@@ -3,8 +3,7 @@ use std::collections::{HashMap, HashSet};
 use bevy::{prelude::*, utils::BoxedFuture, asset::*, reflect::TypeUuid};
 use serde::{Deserialize, Serialize};
 
-use super::{geometry::{Geometry, Light}, material::TextureMaterial, grid::CellID, stat::Attributes};
-use crate::{util::serialize::*, scripting::LuaScriptVars};
+use super::{geometry::{Geometry, Light}, material::TextureMaterial, grid::CellID, stat::Attributes, lua::LuaScriptVars};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum PrefabLocation {
@@ -56,12 +55,9 @@ pub struct Level {
     pub scripts:     Vec<String>,
     #[serde(default)]
     pub script_vars: LuaScriptVars,
-    #[serde(default = "default_background", deserialize_with = "deserialize_hex_color", serialize_with = "serialize_hex_color")]
-    pub background:  Color,
     pub materials:   HashMap<String, TextureMaterial>,
     pub rooms:       HashMap<String, Room>,
 }
-pub fn default_background() -> Color { Color::BLACK }
 pub fn default_scripts() -> Vec<String> { Vec::new() }
 
 #[derive(Default)]

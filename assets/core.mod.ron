@@ -1,7 +1,7 @@
 #![enable(implicit_some)]
 (
     version:      (0,0,1),
-    dependencies: [],          // def: []
+    dependencies: [],
     load_after:   [],          // def: []
     load_before:  [],          // def: []
     priority:     -999999999., // def: 0.0

@@ -1,12 +1,11 @@
 use std::{collections::hash_map::DefaultHasher, hash::{Hash, Hasher}};
 
 use bevy::{prelude::{Component, Handle}, asset::{AssetLoader, Asset}};
-use bevy_inspector_egui::Inspectable;
 use ghost::phantom;
 use std::path::Path;
 
 /// A component that marks an Entity as needing initialization logic from some system before use
-#[derive(Clone, Component, Copy, Debug, Inspectable)]
+#[derive(Clone, Component, Copy, Debug)]
 #[phantom]
 pub struct ToInit<T: ?Sized>;
 impl<T> Default for ToInit<T>  {
@@ -15,7 +14,7 @@ impl<T> Default for ToInit<T>  {
     }
 }
 
-#[derive(Clone, Component, Default, Debug, Inspectable)]
+#[derive(Clone, Component, Default, Debug)]
 pub struct ToInitHandle<T>(pub Handle<T>) where T: Asset;
 impl<T> ToInitHandle<T> where T: Asset {
     pub fn new(handle: Handle<T>) -> Self {
@@ -23,7 +22,7 @@ impl<T> ToInitHandle<T> where T: Asset {
     }
 }
 
-#[derive(Clone, Component, Copy, Debug, Inspectable)]
+#[derive(Clone, Component, Copy, Debug)]
 pub struct ToInitWith<T: ?Sized, P> {
     to_init: ToInit<T>,
     params: P,

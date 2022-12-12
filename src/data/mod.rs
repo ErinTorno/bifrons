@@ -4,6 +4,7 @@ pub mod geometry;
 pub mod grid;
 pub mod input;
 pub mod item;
+pub mod lua;
 pub mod level;
 pub mod lang;
 pub mod material;

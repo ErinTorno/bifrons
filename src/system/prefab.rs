@@ -1,9 +1,8 @@
 use bevy::{prelude::*, asset::LoadState};
-use bevy_inspector_egui::{Inspectable, RegisterInspectable};
-use bevy_mod_scripting::prelude::{ScriptCollection, LuaFile, Script};
-use crate::{system::common::ToInit, data::{prefab::*, input::{ActionState, InputMap}, material::{TexMatInfo, LoadedMaterials}, stat::Attributes}, scripting::LuaScriptVars, util::pair_clone};
+use bevy_inspector_egui::prelude::*;
+use crate::{system::common::ToInit, data::{prefab::*, input::{ActionState, InputMap}, material::{TexMatInfo, LoadedMaterials, MaterialColors, MaterialsToInit}, stat::Attributes, lua::{LuaScriptVars}}, util::pair_clone};
 
-use super::{texture::{MaterialColors, Background}, camera::{ActiveCamera, Focus}, common::ToInitHandle};
+use super::{texture::{Background}, camera::{ActiveCamera, Focus}, common::ToInitHandle, lua::{ToInitScripts, SharedInstances, LuaQueue}};
 
 #[derive(Clone, Debug, Default)]
 pub struct PrefabPlugin;
@@ -11,14 +10,13 @@ pub struct PrefabPlugin;
 impl Plugin for PrefabPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         app
-            .register_inspectable::<Player>()
             .add_startup_system(temp_setup)
             .add_system(spawn_prefab)
         ;
     }
 }
 
-#[derive(Clone, Component, Copy, Debug, Inspectable)]
+#[derive(Clone, Component, Copy, Debug, InspectorOptions)]
 pub struct Player {
     pub id: u32,
 }
@@ -27,35 +25,41 @@ pub fn temp_setup(
     mut commands: Commands,
     asset_server:  Res<AssetServer>,
 ) {
-    commands.spawn()
-        .insert_bundle(TransformBundle {
+    commands.spawn((
+        LuaScriptVars::default(),
+        Name::new("player"),
+        Player { id: 0 },
+        ToInitHandle::<Prefab>::new(asset_server.load("chars/labolas.prefab.ron")),
+        TransformBundle {
             ..default()
-        })
-        .insert_bundle(VisibilityBundle::default())
-        .insert(Player { id: 0 })
-        .insert(LuaScriptVars::default())
-        .insert(ToInitHandle::<Prefab>::new(asset_server.load("chars/labolas.prefab.ron")));
+        },
+        VisibilityBundle::default(),
+    ));
 }
 
 pub fn spawn_prefab(
-    mut commands:     Commands,
-    mut mat_colors:   ResMut<MaterialColors>,
-    asset_server:     Res<AssetServer>,
-    background:       Res<Background>,
-    mut tex_mat_info: ResMut<TexMatInfo>,
-    prefabs:          Res<Assets<Prefab>>,
-    mut meshes:       ResMut<Assets<Mesh>>,
-    mut materials:    ResMut<Assets<StandardMaterial>>,
-    mut to_spawn:     Query<(Entity, &ToInitHandle<Prefab>, &mut LuaScriptVars, Option<&Player>, Option<&LoadedMaterials>, Option<&mut Attributes>)>,
+    mut commands:      Commands,
+    mut mat_colors:    ResMut<MaterialColors>,
+    mut mats_to_init:  ResMut<MaterialsToInit>,
+    asset_server:      Res<AssetServer>,
+    background:        Res<Background>,
+    mut lua_instances: ResMut<SharedInstances>,
+    mut tex_mat_info:  ResMut<TexMatInfo>,
+    prefabs:           Res<Assets<Prefab>>,
+    mut meshes:        ResMut<Assets<Mesh>>,
+    mut materials:     ResMut<Assets<StandardMaterial>>,
+    mut to_spawn:      Query<(Entity, &ToInitHandle<Prefab>, &mut LuaScriptVars, Option<&Player>, Option<&LoadedMaterials>, Option<&mut Attributes>)>,
 ) {
     for (entity, ToInitHandle(handle), mut script_vars, player, loaded_mats, attributes) in to_spawn.iter_mut() {
-        if let Some(prefab) = prefabs.get(handle) {
+        if let Some(prefab) = prefabs.get(&handle) {
             let entity = commands.entity(entity)
-                .insert(ActionState::default())
-                .insert(InputMap::default())
+                .insert((
+                    ActionState::default(),
+                    InputMap::default(),
+                ))
                 .remove::<ToInitHandle<Prefab>>()
                 .id();
-            let mut loaded = prefab.animation.add_parts(entity, &mut commands, mat_colors.as_mut(), &asset_server, &mut tex_mat_info, &background, meshes.as_mut(), materials.as_mut());
+            let mut loaded = prefab.animation.add_parts(entity, &mut commands, mat_colors.as_mut(), &mut mats_to_init.as_mut(), &asset_server, &mut tex_mat_info, &background, meshes.as_mut(), materials.as_mut());
             if let Some(mats) = loaded_mats {
                 loaded.by_name.extend((&mats.by_name).into_iter().map(|(k, v)| (k.clone(), v.clone())));
             }
@@ -69,13 +73,14 @@ pub fn spawn_prefab(
 
             if !prefab.scripts.is_empty() {
                 script_vars.merge(&prefab.script_vars);
+
                 commands.entity(entity)
-                    .insert(ScriptCollection::<LuaFile> {
-                        scripts: prefab.scripts.iter().map(|path| {
-                            let handle = asset_server.load::<LuaFile, _>(path);
-                            Script::<LuaFile>::new(path.clone(), handle)
-                        }).collect()
-                    });
+                    .insert((
+                        LuaQueue::default(),
+                        ToInitScripts {
+                            handles: prefab.scripts.iter().map(|s| (lua_instances.gen_next_id(), asset_server.load(s))).collect(),
+                        },
+                    ));
             }
             if let Some(attr) = &prefab.attributes {
                 if let Some(mut attributes) = attributes {
@@ -87,12 +92,13 @@ pub fn spawn_prefab(
                 }
             }
             if player.is_some() {
-                commands.spawn()
-                    .insert(ToInit::<Camera3d>::default())
-                    .insert(ActiveCamera {
+                commands.spawn((
+                    ToInit::<Camera3d>::default(),
+                    ActiveCamera {
                         controller: Some(entity),
                         focus: Focus::Entity { which: entity, offset: Vec3::ZERO }
-                    });
+                    },
+                ));
             }
         } else {
             match asset_server.get_load_state(handle) {

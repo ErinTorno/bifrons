@@ -1,3 +1,5 @@
+--!shared
+
 local g_vars = {}
 local g_material_handle = {}
 local g_variant = "blank"
@@ -8,13 +10,13 @@ local g_all_variants = {
 
 function all_colors()
     return {
-        Color.hex("#5e292f"),
-        Color.hex("#e09b4d"),
-        Color.hex("#9cabb1"),
-        Color.hex("#785c3b"),
-        Color.hex("#4b4158"),
-        Color.hex("#63602e"),
-        Color.hex("#deceb4"),
+        Rgba.hex("#5e292f"),
+        Rgba.hex("#e09b4d"),
+        Rgba.hex("#9cabb1"),
+        Rgba.hex("#785c3b"),
+        Rgba.hex("#4b4158"),
+        Rgba.hex("#63602e"),
+        Rgba.hex("#deceb4"),
     }
 end
 

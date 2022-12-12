@@ -1,7 +1,6 @@
 use std::f32::consts::PI;
 
 use bevy::{prelude::*};
-use bevy_inspector_egui::RegisterInspectable;
 
 use crate::data::geometry::{LightAnim, LightAnimState, Light};
 
@@ -11,8 +10,6 @@ pub struct AnimPlugin;
 impl Plugin for AnimPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         app
-            .register_inspectable::<LightAnim>()
-            .register_inspectable::<LightAnimState>()
             .register_type::<Light>()
             .register_type::<LightAnim>()
             .register_type::<LightAnimState>()
@@ -28,7 +25,7 @@ pub fn anim_lights(
     for (anim, anim_state, directional, point, spotlight) in query.iter_mut() {
         let new_value = anim_state.base_value * match anim {
             LightAnim::Constant { mul } =>  *mul,
-            LightAnim::Sin { period, amplitude, phase_shift } => ((time.seconds_since_startup() as f32) / period * 2. * PI + phase_shift).sin() * amplitude + 1.
+            LightAnim::Sin { period, amplitude, phase_shift } => (time.elapsed_seconds() / period * 2. * PI + phase_shift).sin() * amplitude + 1.
         };
         if let Some(mut light) = directional {
             light.illuminance = new_value;

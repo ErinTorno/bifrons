@@ -28,14 +28,13 @@ Prefab(
             ],
         ),
         parts: {
-            "fire": Sprite(bone: (name: "root"), layer: Outline,    shape: Quad(w: 0.308, h: 0.52), material: "fire", atlas_offset: (row: 0, col: 2)),
-            "bkg":  Sprite(bone: (name: "root"), layer: Background, shape: Quad(w: 0.308, h: 0.52), material: "bkg",  atlas_offset: (row: 0, col: 1)),
-            "out":  Sprite(bone: (name: "root"), layer: Outline,    shape: Quad(w: 0.308, h: 0.52), material: "out"),
+            "fire": Sprite(bone: (name: "root"), shape: Quad(w: 0.308, h: 0.52), material: "fire", atlas_offset: (row: 0, col: 2)),
+            "bkg":  Sprite(bone: (name: "root"), shape: Quad(w: 0.308, h: 0.52), material: "bkg",  atlas_offset: (row: 0, col: 1)),
+            "out":  Sprite(bone: (name: "root"), shape: Quad(w: 0.308, h: 0.52), material: "out"),
         },
         materials: {
             "out": (
-                layer:            Outline,
-                color:            "#4b4158",
+                color:            "ferra",
                 texture:          "items/shutter_lantern.png",
                 emissive_texture: "items/shutter_lantern.png",
                 normal_texture:   "props/paper_n.png",
@@ -44,14 +43,13 @@ Prefab(
                 metallic:         0.8,
             ),
             "bkg": (
-                layer:            Background,
+                color:            "background",
                 texture:          "items/shutter_lantern.png",
                 atlas:            (rows: 1, columns: 3, width: 314, height: 512),
                 alpha_blend:      true,
             ),
             "fire": (
-                layer:            Outline,
-                color:            "#e09b40",
+                color:            "yellow",
                 texture:          "items/shutter_lantern.png",
                 emissive_texture: "items/shutter_lantern.png",
                 atlas:            (rows: 1, columns: 3, width: 314, height: 512),
