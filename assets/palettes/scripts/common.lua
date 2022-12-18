@@ -1,8 +1,7 @@
 --!shared
 
-function desaturate(ctx)
-    local ratio = ctx.config.ratio or 1
-    local color = ctx.color
-    color.saturation = color.saturation * math.clamp(1 - ratio, 0, 1)
-    ctx(color)
+function desaturate(rgba, ratio)
+    local r = ratio or 1
+    rgba.saturation = rgba.saturation * Math.clamp(1 - r, 0, 1)
+    return rgba
 end

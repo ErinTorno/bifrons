@@ -1,7 +1,4 @@
-#![enable(implicit_some)]
-#![enable(unwrap_newtypes)]
-#![enable(unwrap_variant_newtypes)]
-Level(
+(
     name:    "Testing House",
     scripts: ["levels/testing/testing_house.lua"],
     lines: {
@@ -20,7 +17,6 @@ Level(
             layer: Outline,
             color: "purple",
             texture: "tiles/floor_squiggle.png",
-            // normal: "tiles/floor_squiggle_n.png",
             mode: Repeat(step: 2., on_step: Rotate180),
         ),
         "siding": (layer: Outline, color: "purple", texture: "tiles/siding.png", mode: Repeat()),
@@ -54,6 +50,7 @@ Level(
             prefabs: [
                 (asset: "props/furniture/end_table", at: Free(-2.9, 0., 2.)), // can drop .prefab.ron extension here, since it already knows it'll need that
                 (asset: "props/furniture/painting",  at: Free(-2.3, 1., -5.8), rotation: (0., 0., 0.3926)),
+                (asset: "props/bones/goat_skull_creepy", at: Free(2.5, 1.25, -5.8), rotation: (0.01, 0.01, -0.3)),
                 (
                     label: "foyer_lantern",
                     asset: "items/lantern", // dropped extension, see above
@@ -61,11 +58,13 @@ Level(
                     rotation: (0., 1.0471, 0.),
                 ),
             ],
+            point_entities: [
+                (name: "stalker", pos: (-4., 3., -2.)),
+            ],
             geometry: [
                 (
                     label:     "floor",                    // label, optional, scripts can get this geometry from this
                     pos:       (0., 0., 0.),               // where the center of the object is
-                    // shape:     Box(w: 12., h: 1., d: 12.), // what shape/porportions the geometry has
                     shape:     Quad(w: 7., h: 11.),        // what shape/porportions the geometry has
                     rotation:  (-1.57079632679, 0., 0.),
                     materials: ["background", "floor"],    // what materials are drawn in order; in this case, we fill the shape with the background color, and then draw the floor material over it
@@ -78,30 +77,30 @@ Level(
                     materials: ["background", "siding"],
                 ),
                 (
-                    pos:       (-4., 2., 0.),
+                    pos:       (-4., 2.25, 0.),
                     shape:     Quad(w: 12., h: 2.),
                     rotation:  (0., 1.57079632679, 0.),
                     materials: ["window"],
                 ),
             ],
             lights: [
-                (
-                    label: "foyer_lights",
-                    pos: (0.19, 4., -2.5),
-                    color: "cream",
-                    shadows_enabled: true,
-                    kind: Point(intensity: 6000.),
-                    anim: Sin(period: 1.25, amplitude: 0.12),
-                ),
-                (
-                    label: "foyer_lights",
-                    pos: (0.17, 4., 2.5),
-                    color: "yellow",
-                    shadows_enabled: true,
-                    kind: Point(intensity: 6000.),
-                    anim: Sin(period: 1.25, amplitude: 0.2, phase_shift: 0.785398163397),
-                ),
-            ]
+                // (
+                //     label: "foyer_lights",
+                //     pos: (0.19, 4., -2.5),
+                //     color: "cream",
+                //     shadows_enabled: true,
+                //     kind: Point(intensity: 6000.),
+                //     anim: Sin(period: 1.25, amplitude: 0.12),
+                // ),
+                // (
+                //     label: "foyer_lights",
+                //     pos: (0.17, 4., 2.5),
+                //     color: "yellow",
+                //     shadows_enabled: true,
+                //     kind: Point(intensity: 6000.),
+                //     anim: Sin(period: 1.25, amplitude: 0.2, phase_shift: 0.785398163397),
+                // ),
+            ],
         ),
     },
 )

@@ -5,6 +5,7 @@ use rand::{prelude::*, distributions::uniform::SampleUniform};
 use rand_chacha::ChaCha8Rng;
 
 use super::LuaMod;
+
 static NEXT_SEED: AtomicU64 = AtomicU64::new(2305843009213693951);
 pub fn with_rng<F, R>(f: F) -> R where F: Fn(&mut ChaCha8Rng) -> R {
     let seed = NEXT_SEED.load(Ordering::Relaxed);

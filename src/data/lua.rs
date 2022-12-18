@@ -71,11 +71,11 @@ impl LuaWorld {
     }
 
     pub fn read(&self) -> MappedRwLockReadGuard<World> {
-        RwLockReadGuard::map(self.pointer.try_read().expect(""), |w: &*mut World| unsafe { &**w })
+        RwLockReadGuard::map(self.pointer.try_read().expect("Unable to acquire world read lock"), |w: &*mut World| unsafe { &**w })
     }
 
     pub fn write(&self) -> MappedRwLockWriteGuard<World> {
-        RwLockWriteGuard::map(self.pointer.try_write().expect(""), |w: &mut *mut World| unsafe { &mut **w })
+        RwLockWriteGuard::map(self.pointer.try_write().expect("Unable to acquire world write lock"), |w: &mut *mut World| unsafe { &mut **w })
     }
 }
 impl LuaUserData for LuaWorld {
@@ -296,40 +296,40 @@ impl LuaMod for ScriptVar {
         Ok(())
     }
 }
-impl Into<ScriptVar> for ()   { fn into(self) -> ScriptVar { ScriptVar::Nil } }
-impl Into<ScriptVar> for bool { fn into(self) -> ScriptVar { ScriptVar::Bool(self) } }
-impl Into<ScriptVar> for i8  { fn into(self) -> ScriptVar { ScriptVar::Int(self as i64) } }
-impl Into<ScriptVar> for i16 { fn into(self) -> ScriptVar { ScriptVar::Int(self as i64) } }
-impl Into<ScriptVar> for i32 { fn into(self) -> ScriptVar { ScriptVar::Int(self as i64) } }
-impl Into<ScriptVar> for i64 { fn into(self) -> ScriptVar { ScriptVar::Int(self as i64) } }
-impl Into<ScriptVar> for u8  { fn into(self) -> ScriptVar { ScriptVar::Int(self as i64) } }
-impl Into<ScriptVar> for u16 { fn into(self) -> ScriptVar { ScriptVar::Int(self as i64) } }
-impl Into<ScriptVar> for u32 { fn into(self) -> ScriptVar { ScriptVar::Int(self as i64) } }
-impl Into<ScriptVar> for u64 { fn into(self) -> ScriptVar { ScriptVar::Int(self as i64) } }
-impl Into<ScriptVar> for f32 { fn into(self) -> ScriptVar { ScriptVar::Num(self as f64) } }
-impl Into<ScriptVar> for f64 { fn into(self) -> ScriptVar { ScriptVar::Num(self as f64) } }
-impl Into<ScriptVar> for Entity { fn into(self) -> ScriptVar { ScriptVar::Entity(self.to_bits()) } }
-impl Into<ScriptVar> for LuaTime { fn into(self) -> ScriptVar { ScriptVar::Time(self) } }
-impl Into<ScriptVar> for String { fn into(self) -> ScriptVar { ScriptVar::Str(self) } }
-impl Into<ScriptVar> for Vec2 { fn into(self) -> ScriptVar { ScriptVar::Vec2(self) } }
-impl Into<ScriptVar> for Vec3 { fn into(self) -> ScriptVar { ScriptVar::Vec3(self) } }
-impl<V> Into<ScriptVar> for HashMap<String, V> where V: Clone + Into<ScriptVar> {
-    fn into(self) -> ScriptVar {
-        let table = self.iter().map(|(k, v)| (k.clone(), <V as Into<ScriptVar>>::into(v.clone()))).collect();
+impl From<()> for ScriptVar      { fn from(_: ())          -> Self { ScriptVar::Nil } }
+impl From<bool> for ScriptVar    { fn from(value: bool)    -> Self { ScriptVar::Bool(value) } }
+impl From<i8> for ScriptVar      { fn from(value: i8)      -> Self { ScriptVar::Int(value as i64) } }
+impl From<i16> for ScriptVar     { fn from(value: i16)     -> Self { ScriptVar::Int(value as i64) } }
+impl From<i32> for ScriptVar     { fn from(value: i32)     -> Self { ScriptVar::Int(value as i64) } }
+impl From<i64> for ScriptVar     { fn from(value: i64)     -> Self { ScriptVar::Int(value as i64) } }
+impl From<u8> for ScriptVar      { fn from(value: u8)      -> Self { ScriptVar::Int(value as i64) } }
+impl From<u16> for ScriptVar     { fn from(value: u16)     -> Self { ScriptVar::Int(value as i64) } }
+impl From<u32> for ScriptVar     { fn from(value: u32)     -> Self { ScriptVar::Int(value as i64) } }
+impl From<u64> for ScriptVar     { fn from(value: u64)     -> Self { ScriptVar::Int(value as i64) } }
+impl From<f32> for ScriptVar     { fn from(value: f32)     -> Self { ScriptVar::Num(value as f64) } }
+impl From<f64> for ScriptVar     { fn from(value: f64)     -> Self { ScriptVar::Num(value as f64) } }
+impl From<Entity> for ScriptVar  { fn from(value: Entity)  -> Self { ScriptVar::Entity(value.to_bits()) } }
+impl From<LuaTime> for ScriptVar { fn from(value: LuaTime) -> Self { ScriptVar::Time(value) } }
+impl From<String> for ScriptVar  { fn from(value: String)  -> Self { ScriptVar::Str(value) } }
+impl From<Vec2> for ScriptVar    { fn from(value: Vec2)    -> Self { ScriptVar::Vec2(value) } }
+impl From<Vec3> for ScriptVar    { fn from(value: Vec3)    -> Self { ScriptVar::Vec3(value) } }
+impl<V> From<HashMap<String, V>> for ScriptVar where V: Clone + Into<ScriptVar> {
+    fn from(value: HashMap<String, V>) -> Self {
+        let table = value.into_iter().map(|(k, v)| (k, v.into())).collect();
         ScriptVar::Table(table)
     }
 }
-impl<V> Into<ScriptVar> for Option<V> where V: Clone + Into<ScriptVar> {
-    fn into(self) -> ScriptVar {
-        match self {
+impl<V> From<Option<V>> for ScriptVar where V: Clone + Into<ScriptVar> {
+    fn from(value: Option<V>) -> Self {
+        match value {
             Some(v) => v.into(),
             None    => ScriptVar::Nil,
         }
     }
 }
-impl<V> Into<ScriptVar> for Vec<V> where V: Clone + Into<ScriptVar> {
-    fn into(self) -> ScriptVar {
-        let vec = self.iter().map(|v| <V as Into<ScriptVar>>::into(v.clone())).collect();
+impl<V> From<Vec<V>> for ScriptVar where V: Clone + Into<ScriptVar> {
+    fn from(value: Vec<V>) -> Self {
+        let vec = value.into_iter().map(|v| v.into()).collect();
         ScriptVar::Array(vec)
     }
 }
@@ -343,16 +343,6 @@ impl<'lua> ToLuaMulti<'lua> for ManyScriptVars {
             mv.push_front(val.clone().to_lua(lua)?);
         }
         Ok(mv)
-    }
-}
-pub const UNIT_PARAMS: ManyScriptVars = ManyScriptVars(vec![]);
-
-#[derive(Clone, Component, Debug, Default, Deserialize, InspectorOptions, PartialEq, Serialize)]
-pub struct LuaScriptVars(pub std::collections::HashMap<String, ScriptVar>);
-
-impl LuaScriptVars {
-    pub fn merge(&mut self, other: &Self) {
-        self.0.extend(other.0.iter().map(|p| (p.0.clone(), p.1.clone())));
     }
 }
 impl<A> Into<ManyScriptVars> for (A,) where A: Into<ScriptVar> {
@@ -378,5 +368,14 @@ impl<A, B, C, D> Into<ManyScriptVars> for (A, B, C, D) where A: Into<ScriptVar>,
 impl<A, B, C, D, E> Into<ManyScriptVars> for (A, B, C, D, E) where A: Into<ScriptVar>, B: Into<ScriptVar>, C: Into<ScriptVar>, D: Into<ScriptVar>, E: Into<ScriptVar> {
     fn into(self) -> ManyScriptVars {
         ManyScriptVars(vec![self.0.into(), self.1.into(), self.2.into(), self.3.into(), self.4.into()])
+    }
+}
+
+#[derive(Clone, Component, Debug, Default, Deserialize, InspectorOptions, PartialEq, Serialize)]
+pub struct LuaScriptVars(pub std::collections::HashMap<String, ScriptVar>);
+
+impl LuaScriptVars {
+    pub fn merge(&mut self, other: &Self) {
+        self.0.extend(other.0.iter().map(|p| (p.0.clone(), p.1.clone())));
     }
 }

@@ -1,8 +1,12 @@
-
 use bevy::prelude::Color;
+use ron::{Options, extensions::Extensions};
 use serde::{Deserializer, de, Serializer, Serialize};
 
 use super::IntoHex;
+
+pub fn ron_options() -> Options {
+    Options::default().with_default_extension(Extensions::all())
+}
 
 pub fn deserialize_hex_color<'de, D>(d: D) -> Result<Color, D::Error> where D: Deserializer<'de> {
     let full: String = de::Deserialize::deserialize(d)?;

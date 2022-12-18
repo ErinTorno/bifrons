@@ -10,9 +10,13 @@ use serde::{de::*, Deserialize, Serialize};
 
 use crate::data::lua::ScriptVar;
 use crate::scripting::LuaMod;
+use crate::scripting::bevy_api::handle::LuaHandle;
 use crate::scripting::{color::RgbaColor};
+use crate::system::common::{fix_missing_extension};
 use crate::system::lua::SharedInstances;
+use crate::system::palette::LoadingPalette;
 use crate::util::IntoHex;
+use crate::util::serialize::ron_options;
 
 use super::lua::{ManyScriptVars, Any2, LuaWorld, LuaReadable, InstanceRef};
 
@@ -47,9 +51,9 @@ impl DynColor {
             DynColor::Background => {
                 let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
                 let w = world.read();
-                let cur_pal = w.resource::<CurrentPalette>();
+                let loaded_pal = w.resource::<LoadedPalettes>();
                 let palettes = w.resource::<Assets<Palette>>();
-                if let Some(palette) = palettes.get(&cur_pal.handle) {
+                if let Some(palette) = palettes.get(&loaded_pal.current_handle) {
                     palette.background.eval_lua(lua)
                 } else { fuchsia_err() }
             },
@@ -59,22 +63,22 @@ impl DynColor {
                 let mut w = world.write();
                 
                 let mut sys = SystemState::<(
-                    Res<CurrentPalette>,
+                    Res<LoadedPalettes>,
                     Res<Assets<Palette>>,
                     ResMut<ColorCache>,
                 )>::new(&mut w);
-                let (cur_pal, palettes, mut color_cache) = sys.get_mut(&mut w);
+                let (loaded_pal, palettes, mut color_cache) = sys.get_mut(&mut w);
 
-                if let Some(palette) = palettes.get(&cur_pal.handle) {
+                if let Some(palette) = palettes.get(&loaded_pal.current_handle) {
                     color_cache.rgba(self, palette, lua)
                 } else { fuchsia_err() }
             },
             DynColor::Named(name) => {
                 let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
                 let w = world.read();
-                let cur_pal = w.resource::<CurrentPalette>();
+                let loaded_pal = w.resource::<LoadedPalettes>();
                 let palettes = w.resource::<Assets<Palette>>();
-                if let Some(palette) = palettes.get(&cur_pal.handle) {
+                if let Some(palette) = palettes.get(&loaded_pal.current_handle) {
                     if let Some(color) = palette.colors.get(name) {
                         RgbaColor::from(color.clone())
                     } else {
@@ -203,8 +207,16 @@ pub struct Palette {
 lazy_static! {
     static ref DEFAULT_PALETTE: Palette = {
         let bytes = include_bytes!("../../assets/palettes/default.palette.ron");
-        ron::de::from_bytes(bytes).unwrap()
+        ron_options().from_bytes(bytes).unwrap()
     };
+}
+impl Palette {
+    pub fn get_script(&self) -> Option<&String> {
+        match &self.on_miss {
+            ColorMiss::Fn { file,.. } => Some(file),
+            _ => None,
+        }
+    }
 }
 impl Default for Palette {
     fn default() -> Self {
@@ -216,6 +228,9 @@ impl<'de> Deserialize<'de> for Palette {
         let mut colors = HashMap::new();
         let mut color_refs = HashMap::new();
         let config: PaletteConfig = Deserialize::deserialize(d)?;
+        if config.background == DynColor::Background {
+            return Err(de::Error::custom("Background is defined recursively as \"background\""));
+        }
         for (k, full) in config.colors {
             match full.chars().next().ok_or_else(|| de::Error::custom("Color string cannot be empty"))? {
                 '#' => {
@@ -251,7 +266,28 @@ impl LuaUserData for Palette {
 impl LuaMod for Palette {
     fn mod_name() -> &'static str { "Palette" }
 
-    fn register_defs(_lua: &Lua, _table: &mut LuaTable) -> Result<(), mlua::Error> {
+    fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
+        table.set("change", lua.create_function(|lua, handle: LuaHandle| {
+            let handle = handle.handle.clone().typed();
+            let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
+            let mut w = world.write();
+            let entity = {
+                let loaded_palettes = w.resource::<LoadedPalettes>();
+                loaded_palettes.by_handle.get(&handle).map(|st| st.entity).unwrap_or_else(|| {
+                    w.spawn_empty().id()
+                })
+            };
+            w.insert_resource(LoadingPalette { handle, entity });
+            Ok(())
+        })?)?;
+        table.set("load", lua.create_function(|lua, path: String| {
+            let path = fix_missing_extension::<PaletteLoader>(path);
+            let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
+            let w = world.read();
+            let asset_server = w.get_resource::<AssetServer>().unwrap();
+            let handle: Handle<Palette> = asset_server.load(&path);
+            Ok(LuaHandle::from(handle))
+        })?)?;
         Ok(())
     }
 }
@@ -266,7 +302,7 @@ impl AssetLoader for PaletteLoader {
         load_context: &'a mut LoadContext,
     ) -> BoxedFuture<'a, Result<(), bevy::asset::Error>> {
         Box::pin(async move {
-            let palette: Palette = ron::de::from_bytes(bytes)?;
+            let palette: Palette = ron_options().from_bytes(bytes)?;
             load_context.set_default_asset(LoadedAsset::new(palette));
             Ok(())
         })
@@ -277,22 +313,26 @@ impl AssetLoader for PaletteLoader {
     }
 }
 
-#[derive(Clone, Debug, Default, Resource)]
-pub struct CurrentPalette {
-    pub script_id: Option<u32>,
-    pub handle:    Handle<Palette>,
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LoadedPaletteState {
+    pub entity:    Entity,
+    pub script_id: u32,
 }
-impl CurrentPalette {
+
+#[derive(Clone, Debug, Resource)]
+pub struct LoadedPalettes {
+    pub current_handle: Handle<Palette>,
+    pub current_state:  LoadedPaletteState,
+    pub by_handle:      HashMap<Handle<Palette>, LoadedPaletteState>
+}
+impl LoadedPalettes {
     pub fn lua_instance<'a>(&self, shared_instances: &'a SharedInstances) -> Option<&'a InstanceRef> {
-        match self.script_id {
-            Some(id) => match &shared_instances.instances.get(&id) {
-                Some(inst) => match &inst.result {
-                    Ok(i) => Some(i),
-                    Err(_) => None,
-                },
-                None => None,
+        match &shared_instances.instances.get(&self.current_state.script_id) {
+            Some(inst) => match &inst.result {
+                Ok(i) => Some(i),
+                Err(_) => None,
             },
-            None     => Some(&shared_instances.collectivist),
+            None => Some(&shared_instances.collectivist),
         }
     }
 }
@@ -301,54 +341,71 @@ impl CurrentPalette {
 pub struct ColorCache(pub HashMap<Handle<Palette>, HashMap<DynColor, RgbaColor>>);
 impl ColorCache {
     pub fn rgba<L>(&mut self, dyn_color: &DynColor, palette: &Palette, lua_readable: &L) -> RgbaColor where L: LuaReadable {
-        let palette_map = self.palette(&palette.handle);
-        if palette_map.is_empty() {
-            for (name, color) in palette.colors.iter() {
-                palette_map.insert(DynColor::Named(name.clone()), color.clone().into());
-            }
-        }
         let dyn_color = if let DynColor::Background = dyn_color { &palette.background } else { dyn_color };
-        match dyn_color {
-            DynColor::Background => { unreachable!() },
-            DynColor::Const(rgba) => *rgba,
-            DynColor::Custom(rgba) => {
-                let rgba = *rgba;
-                match &palette.on_miss {
-                    ColorMiss::Clamp => {
-                        // todo color match technology
-                        palette.missing_color
-                    },
-                    ColorMiss::Identity => rgba,
-                    ColorMiss::Fn { function, params,.. } => { // uh oh, danger!
-                        let mut params = params.0.clone();
-                        let mut new_params = Vec::new();
-                        new_params.push(ScriptVar::Color(rgba));
-                        new_params.append(&mut params);
-                        lua_readable.with_read(|lua| {
-                            let globals = lua.globals();
-                            if let Some(f) = globals.get::<_, Option<LuaFunction>>(function.clone()).unwrap() {
-                                match f.call::<_, RgbaColor>(params) {
-                                    Ok(c)    => c,
-                                    Err(err) => {
-                                        warn!("Function for on_miss Fn {} errored: {}", function, err);
-                                        RgbaColor::FUSCHIA
-                                    }
-                                }
-                            } else {
-                                warn!("Function not found for on_miss Fn {}", function);
-                                RgbaColor::FUSCHIA
+        if let Some(rgba) = {
+            let palette_map = self.palette(&palette.handle);
+            if palette_map.is_empty() {
+                for (name, color) in palette.colors.iter() {
+                    palette_map.insert(DynColor::Named(name.clone()), color.clone().into());
+                }
+            }
+            palette_map.get(&dyn_color)
+        } {
+            *rgba
+        } else {
+            match dyn_color {
+                DynColor::Background => { unreachable!() },
+                DynColor::Const(rgba) => *rgba,
+                DynColor::Custom(rgba) => {
+                    let rgba = *rgba;
+                    let rgba = match &palette.on_miss {
+                        ColorMiss::Clamp => {
+                            // todo color match technology
+                            palette.missing_color
+                        },
+                        ColorMiss::Identity => rgba,
+                        ColorMiss::Fn { function, params,.. } => { // uh oh, danger!
+                            let mut new_params = Vec::new();
+                            new_params.push(ScriptVar::Color(rgba));
+                            if !params.0.is_empty() {
+                                let mut params = params.0.clone();
+                                new_params.append(&mut params);
                             }
-                        })
-                    },
-                }
-            },
-            DynColor::Named(name) => {
-                if let Some(color) = palette.colors.get(name) {
-                    RgbaColor::from(*color)
-                } else {
-                    palette.missing_color
-                }
-            },
+                            lua_readable.with_read(|lua| {
+                                let globals = lua.globals();
+                                if let Some(f) = globals.get::<_, Option<LuaFunction>>(function.as_str()).unwrap() {
+                                    match f.call::<_, RgbaColor>(ManyScriptVars(new_params)) {
+                                        Ok(c)    => c,
+                                        Err(err) => {
+                                            warn!("Function for on_miss Fn {} errored: {}", function, err);
+                                            RgbaColor::FUSCHIA
+                                        }
+                                    }
+                                } else {
+                                    warn!("Function not found for on_miss Fn {}", function);
+                                    RgbaColor::FUSCHIA
+                                }
+                            })
+                        },
+                    };
+                    let palette_map = self.0.get_mut(&palette.handle).unwrap();
+                    palette_map.insert(dyn_color.clone(), rgba);
+                    rgba
+                },
+                DynColor::Named(name) => {
+                    if let Some(color) = palette.colors.get(name) {
+                        RgbaColor::from(*color)
+                    } else if let Some(color) = DEFAULT_PALETTE.colors.get(name) {
+                        let def_color = DynColor::Custom(color.clone().into());
+                        let rgba = self.rgba(&def_color, palette, lua_readable);
+                        let palette_map = self.0.get_mut(&palette.handle).unwrap();
+                        palette_map.insert(dyn_color.clone(), rgba);
+                        rgba
+                    } else {
+                        palette.missing_color
+                    }
+                },
+            }
         }
     }
 

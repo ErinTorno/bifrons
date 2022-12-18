@@ -174,6 +174,7 @@ pub enum AnimPart {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Animation {
     pub parts:       IndexMap<String, AnimPart>,
+    #[serde(default)]
     pub frames:      HashMap<String, Vec<Frame>>,
     pub materials:   HashMap<String, TextureMaterial>,
     #[serde(default)]

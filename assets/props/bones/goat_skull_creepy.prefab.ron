@@ -1,0 +1,37 @@
+(
+    tags: ["bone", "skull"],
+    lines: {
+        "english": {
+            "name":    "Goat skull",
+            "inspect": "It's a goat's skull",
+        },
+    },
+    attributes: (
+        pools: {
+            "health": (base: 1., current: 1.),
+        },
+        stat: {
+            "resist/bludgeon": 2.0, 
+            "resist/fire":     0.5, 
+        },
+    ),
+    animation: (
+        parts: {
+            "bkg":      Sprite(bone: (name: "root"), shape: Quad(w: 0.406, h: 0.5), material: "bkg", atlas_offset: (row: 0, col: 1)),
+            "frame":    Sprite(bone: (name: "root"), shape: Quad(w: 0.406, h: 0.5), material: "out"),
+        },
+        materials: {
+            "bkg": (
+                atlas:          (rows: 1, columns: 2, width: 832, height: 1024),
+                texture:        "props/bones/goat_skull_creepy.png",
+                color:          "background",
+            ),
+            "out": (
+                atlas:          (rows: 1, columns: 2, width: 832, height: 1024),
+                texture:        "props/bones/goat_skull_creepy.png",
+                color:          "cream",
+                alpha_blend:    true,
+            ),
+        },
+    ),
+)

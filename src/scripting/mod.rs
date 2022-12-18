@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 use mlua::prelude::*;
 
-use crate::{data::{stat::{Stat, Pool}, material::{TextureMaterial,}, input::ActionState, formlist::{FormList, InjectCommands}, geometry::{Light, LightAnim, LightKind}, lua::{ScriptVar}}};
+use crate::{data::{stat::{Stat, Pool}, material::{TextureMaterial,}, input::ActionState, formlist::{FormList, InjectCommands}, geometry::{Light, LightAnim, LightKind}, lua::{ScriptVar}, palette::Palette}};
 
-use self::{color::RgbaColor, time::LuaTime, registry::Registry, entity::{LuaQuery, EntityAPI}, level::LevelAPI, random::RandomAPI, log::LogAPI, bevy_api::math::{LuaVec2, LuaVec3}};
+use self::{color::RgbaColor, time::LuaTime, registry::Registry, entity::{LuaQuery, EntityAPI}, level::LevelAPI, random::RandomAPI, log::LogAPI, bevy_api::math::{LuaVec2, LuaVec3, MathAPI}};
 
 pub mod bevy_api;
 pub mod color;
@@ -29,6 +29,8 @@ pub fn register_lua_mods(lua: &Lua) -> Result<(), LuaError> {
     init_luamod::<LuaQuery>(lua)?;
     init_luamod::<LuaVec2>(lua)?;
     init_luamod::<LuaVec3>(lua)?;
+    init_luamod::<MathAPI>(lua)?;
+    init_luamod::<Palette>(lua)?;
     init_luamod::<RandomAPI>(lua)?;
     init_luamod::<Registry>(lua)?;
     init_luamod::<ScriptVar>(lua)?;
@@ -91,18 +93,24 @@ pub fn lua_to_string(value: LuaValue) -> Result<String, LuaError> {
         LuaValue::Number(n)   => Ok(n.to_string()),
         LuaValue::String(s) => Ok(s.to_str()?.to_string()),
         LuaValue::Table(table) => {
-            let mut str = String::new();
-            str += "{";
-            let mut first = true;
-            for pair in table.pairs() {
-                let (k, v) = pair?;
-                let key = lua_to_string(k)?;
-                let val = lua_to_string(v)?;
-                str += format!("{}{} = {}", if first { "" } else { ", " }, key, val).as_str();
-                first = false;
+            let meta = table.get_metatable();
+            if meta.is_some() && meta.as_ref().unwrap().contains_key(LuaMetaMethod::ToString.name())? {
+                let tostring: LuaFunction = meta.unwrap().get(LuaMetaMethod::ToString.name())?;
+                Ok(tostring.call(LuaValue::Table(table))?)
+            } else {
+                let mut str = String::new();
+                str += "{";
+                let mut first = true;
+                for pair in table.pairs() {
+                    let (k, v) = pair?;
+                    let key = lua_to_string(k)?;
+                    let val = lua_to_string(v)?;
+                    str += format!("{}{} = {}", if first { "" } else { ", " }, key, val).as_str();
+                    first = false;
+                }
+                str += "}";
+                Ok(str)
             }
-            str += "}";
-            Ok(str)
         },
         LuaValue::Thread(_) => Ok("#thread".to_string()),
         LuaValue::UserData(data) => {

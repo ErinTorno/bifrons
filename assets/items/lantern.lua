@@ -5,7 +5,7 @@ local g_vars = {}
 function new_light()
     local light = Light.new(LightKind.point(7000.0, 20., 0.1))
     light.label = "lantern_light"
-    light.color = g_vars.lantern_color or Rgba.hex("#e09b4d")
+    light.color = g_vars.lantern_color or "yellow"
     light.anim  = LightAnim.sin(0.25, 0.75)
     light.pos   = Vec3.new(0, 0.1846, 0)
     return light
@@ -16,13 +16,12 @@ function set_lit(is_lit)
     if is_lit then
         local handles = Material.handle_table(entity)
         local outline = handles.out:get()
-        outline.color = g_vars.lantern_color or Rgba.hex("#e09b4d")
-        outline.emissive_color = g_vars.lantern_emissive or Rgba.hex("#a17d37")
+        outline.color = g_vars.lantern_color or "sierra"
+        outline.emissive_color = g_vars.lantern_emissive or "orange"
         outline:apply(handles.out)
 
         local fire = handles.fire:get()
-        local fire_color = g_vars.lantern_color or Rgba.hex("#e09b4d")
-        fire_color.a        = 0.75
+        local fire_color = g_vars.lantern_color or "yellow"
         fire.color          = fire_color
         fire.emissive_color = fire_color
         fire:apply(handles.fire)
@@ -37,7 +36,7 @@ function set_lit(is_lit)
 
         local handles = Material.handle_table(entity)
         local outline = handles.out:get()
-        outline.color          = g_vars.lantern_frame_color or Rgba.hex("#4b4158")
+        outline.color          = g_vars.lantern_frame_color or "ferra"
         outline.emissive_color = Rgba.black
         outline:apply(handles.out)
 

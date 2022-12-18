@@ -3,6 +3,8 @@ use std::collections::{HashMap, HashSet};
 use bevy::{prelude::*, utils::BoxedFuture, asset::*, reflect::TypeUuid};
 use serde::{Deserialize, Serialize};
 
+use crate::util::serialize::ron_options;
+
 use super::{geometry::{Geometry, Light}, material::TextureMaterial, grid::CellID, stat::Attributes, lua::LuaScriptVars};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -28,18 +30,26 @@ pub struct PrefabInstance {
 }
 fn default_room_child() -> bool { true }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct PointEntity {
+    pub pos:  Vec3,
+    pub name: String,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Room {
     #[serde(default)]
     pub reveal_before_entry: bool,
     #[serde(default)]
-    pub pos:      Vec3,
+    pub pos:            Vec3,
     #[serde(default)]
-    pub prefabs: Vec<PrefabInstance>,
+    pub prefabs:        Vec<PrefabInstance>,
     #[serde(default)]
-    pub geometry: Vec<Geometry>,
+    pub geometry:       Vec<Geometry>,
     #[serde(default)]
-    pub lights:   Vec<Light>,
+    pub lights:         Vec<Light>,
+    #[serde(default)]
+    pub point_entities: Vec<PointEntity>,
 }
 
 #[derive(Clone, Component, Debug, Default, Deserialize, Serialize)]
@@ -53,6 +63,8 @@ pub struct Level {
     pub name:        String,
     #[serde(default = "default_scripts")]
     pub scripts:     Vec<String>,
+    #[serde(default)]
+    pub palette:     Option<String>,
     #[serde(default)]
     pub script_vars: LuaScriptVars,
     pub materials:   HashMap<String, TextureMaterial>,
@@ -70,7 +82,7 @@ impl AssetLoader for LevelLoader {
         load_context: &'a mut LoadContext,
     ) -> BoxedFuture<'a, Result<(), bevy::asset::Error>> {
         Box::pin(async move {
-            let level: Level = ron::de::from_bytes(bytes)?;
+            let level: Level = ron_options().from_bytes(bytes)?;
             load_context.set_default_asset(LoadedAsset::new(level));
             Ok(())
         })
@@ -104,7 +116,7 @@ impl AssetLoader for LevelPieceLoader {
         load_context: &'a mut LoadContext,
     ) -> BoxedFuture<'a, Result<(), bevy::asset::Error>> {
         Box::pin(async move {
-            let piece: LevelPiece = ron::de::from_bytes(bytes)?;
+            let piece: LevelPiece =  ron_options().from_bytes(bytes)?;
             load_context.set_default_asset(LoadedAsset::new(piece));
             Ok(())
         })

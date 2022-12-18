@@ -1,6 +1,7 @@
 use std::time::Duration;
 use std::{collections::{HashMap, HashSet}};
 
+use bevy::asset::LoadState;
 use bevy::ecs::system::SystemState;
 use bevy::{prelude::*};
 use bevy_inspector_egui::InspectorOptions;
@@ -12,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::data::lua::{LuaScript, LuaScriptLoader, InstanceKind, InstanceRef, Hook, LuaWorld, Recipient};
 use crate::scripting::event::{constants, ON_UPDATE, ON_INIT};
 use crate::scripting::register_lua_mods;
-use crate::scripting::registry::Registry;
+use crate::scripting::registry::{Registry, AssetEventKey};
 use crate::scripting::time::LuaTime;
 use crate::util::collections::Singleton;
 
@@ -22,7 +23,9 @@ pub struct LuaPlugin;
 impl Plugin for LuaPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         let mut on_update = SystemStage::single_threaded();
-        on_update.add_system(send_on_update);
+        on_update
+            .add_system(send_on_update)
+            .add_system(on_asset_load);
 
         let mut on_queue_collect = SystemStage::parallel();
         on_queue_collect.add_system(update_script_queue);
@@ -90,7 +93,7 @@ impl LuaUserData for ScriptRefs {
 pub struct SharedInstances {
     pub next_id:      u32,
     pub collectivist: InstanceRef,
-    pub by_path:      HashMap<String, HashSet<Entity>>,
+    pub by_path:      HashMap<String, HashMap<Entity, u32>>,
     pub instances:    HashMap<u32, LuaInstance>,
     pub shared:       HashMap<Handle<LuaScript>, u32>,
     pub updateables:  HashSet<u32>,
@@ -120,6 +123,9 @@ impl SharedInstances {
 impl Default for SharedInstances {
     fn default() -> Self {
         let collectivist = Lua::new();
+        register_lua_mods(&collectivist).unwrap();
+        collectivist.globals().set("script_id", SharedInstances::COLLECTIVIST_ID).unwrap();
+        // todo register world
         let collectivist = RwLock::new(collectivist).into();
         SharedInstances {
             next_id: 1,
@@ -156,11 +162,12 @@ pub fn send_on_update(
     }
 }
 
-pub fn load_script(script: &LuaScript, world: LuaWorld) -> Result<InstanceRef, LuaError> {
+pub fn load_script(script: &LuaScript, world: LuaWorld, id: u32) -> Result<InstanceRef, LuaError> {
     let lua = Lua::new();
     lua.globals().set("world", world)?;
     lua.load(&script.source).exec()?;
     register_lua_mods(&lua)?;
+    lua.globals().set("script_id", id)?;
     Ok(RwLock::new(lua).into())
 }
 
@@ -171,12 +178,12 @@ pub fn init_lua_script(
         Res<AssetServer>,
         ResMut<SharedInstances>,
         Res<Assets<LuaScript>>,
-        Query<(Entity, &mut ToInitScripts)>,
+        Query<(Entity, &mut ToInitScripts, Option<&mut ScriptRefs>, Option<&mut LuaQueue>)>,
     )>,
 ) {
     let lua_world = unsafe { LuaWorld::new(world) };
     let (mut commands, asset_server, mut instances, lua_scripts, mut query) = state.get_mut(world);
-    'query: for (entity, to_init) in query.iter_mut() {
+    'query: for (entity, to_init, script_refs, lua_queue) in query.iter_mut() {
         let mut scripts = HashMap::new();
         for (id, handle) in to_init.handles.iter() {
             if let Some(script) = lua_scripts.get(handle) {
@@ -188,17 +195,21 @@ pub fn init_lua_script(
         let mut ids = HashSet::new();
         for (handle, (id, script)) in scripts.iter() { 
             let id = *id;
+            let get_path = |asset_server: &AssetServer, handle: &Handle<LuaScript>| asset_server.get_handle_path(handle)
+                .and_then(|p| p.path().to_str()
+                .map(|s| s.to_string()))
+                .unwrap_or(format!("pathless/{}", id));
             match script.instance {
                 InstanceKind::Unique => {
-                    let path = asset_server.get_handle_path(handle).and_then(|p| p.path().to_str().map(|s| s.to_string())).unwrap_or("".into());
-                    let result = load_script(&script, lua_world.clone());
+                    let path = get_path(&asset_server, handle);
+                    let result = load_script(&script, lua_world.clone(), id);
                     if let Err(err) = &result {
                         error!("Failed to load {}: {}", path, err);
                     }
                     ids.insert(id);
                     instances.by_path.entry(path.clone())
-                        .or_insert_with(|| HashSet::new())
-                        .insert(entity);
+                        .or_insert_with(|| HashMap::new())
+                        .insert(entity, id);
                     instances.instances.insert(id, LuaInstance {
                         handle: handle.clone_weak(),
                         path,
@@ -211,15 +222,15 @@ pub fn init_lua_script(
                             ids.insert(*instance_id);
                         },
                         None => {
-                            let path = asset_server.get_handle_path(handle).and_then(|p| p.path().to_str().map(|s| s.to_string())).unwrap_or("".into());
-                            let result = load_script(&script, lua_world.clone());
+                            let path = get_path(&asset_server, handle);
+                            let result = load_script(&script, lua_world.clone(), id);
                             if let Err(err) = &result {
                                 error!("Failed to load {}: {}", path, err);
                             }
                             ids.insert(id);
                             instances.by_path.entry(path.clone())
-                                .or_insert_with(|| HashSet::new())
-                                .insert(entity);
+                                .or_insert_with(|| HashMap::new())
+                                .insert(entity, id);
                             instances.instances.insert(id, LuaInstance {
                                 handle: handle.clone_weak(),
                                 path,
@@ -231,7 +242,7 @@ pub fn init_lua_script(
                 },
                 InstanceKind::Collectivist => {
                     ids.insert(SharedInstances::COLLECTIVIST_ID);
-                    let path = asset_server.get_handle_path(handle).and_then(|p| p.path().to_str().map(|s| s.to_string())).unwrap_or("".into());
+                    let path = get_path(&asset_server, handle);
                     {
                         let w = instances.collectivist.lock.write();
                         let _ = w.load(&script.source).exec().map_err(|err| {
@@ -239,24 +250,30 @@ pub fn init_lua_script(
                         });
                     }
                     instances.by_path.entry(path.clone())
-                        .or_insert_with(|| HashSet::new())
-                        .insert(entity);
+                        .or_insert_with(|| HashMap::new())
+                        .insert(entity, id);
                 },
             }
         }
         commands.entity(entity)
-            .remove::<ToInitScripts>()
-            .insert((
-                ScriptRefs { ids },
-                LuaQueue { calls: vec![HookCall::next_frame(Hook { name: ON_INIT.to_string(), args: default() })] }
-            ));
+            .remove::<ToInitScripts>();
+        if let Some(mut script_refs) = script_refs {
+            script_refs.ids.extend(ids);
+        } else {
+            commands.entity(entity).insert(ScriptRefs { ids });
+        }
+        if let Some(mut lua_queue) = lua_queue {
+            lua_queue.calls.push(HookCall::next_frame(Hook { name: ON_INIT.to_string(), args: default() }));
+        } else {
+            commands.entity(entity).insert(LuaQueue { calls: vec![HookCall::next_frame(Hook { name: ON_INIT.to_string(), args: default() })] });
+        }
     }
     state.apply(world);
 }
 
 pub fn update_script_queue(
     mut si:    ResMut<SharedInstances>,
-    mut query: Query<(Entity, &mut LuaQueue, &ScriptRefs)>,
+    mut query: Query<(Entity, &mut LuaQueue, &ScriptRefs), >,
 ) {
     for (entity, mut queue, script_ref) in query.iter_mut() {
         queue.calls.retain(|HookCall { hook, script_ids }| {
@@ -282,5 +299,35 @@ pub fn update_script_queue(
                 false
             } else { true }
         });
+    }
+}
+
+pub fn on_asset_load(
+    mut registry: ResMut<Registry>,
+    si:           Res<SharedInstances>,
+    asset_server: Res<AssetServer>,
+) {
+    for (AssetEventKey { entity, handle, script_id }, reg_key) in registry.on_asset_load.drain_filter(|key, _|
+        match asset_server.get_load_state(&key.handle.handle) {
+            LoadState::Loaded => true,
+            LoadState::Failed => {
+                let path = asset_server.get_handle_path(&key.handle.handle);
+                info!("Asset {:?} failed to load, so all on_load events for {:?} will be dropped", path, key.entity);
+                true
+            },
+            _ => false,
+        }
+    ) {
+        let lua_inst = si.instances.get(&script_id).unwrap();
+        if let Ok(inst_ref) = &lua_inst.result {
+            let lua = inst_ref.lock.write();
+            let v: Vec<LuaFunction> = lua.registry_value(&reg_key).unwrap();
+            lua.remove_registry_value(reg_key).unwrap();
+            for f in v {
+                f.call::<_, ()>(handle.clone()).unwrap();
+            }
+        } else {
+            info!("Lua script {:?} failed to load, so all on_load events for {:?} will be dropped", script_id, entity);
+        }
     }
 }

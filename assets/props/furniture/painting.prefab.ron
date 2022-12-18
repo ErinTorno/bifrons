@@ -1,6 +1,3 @@
-#![enable(implicit_some)]
-#![enable(unwrap_newtypes)]
-#![enable(unwrap_variant_newtypes)]
 (
     scripts: ["props/furniture/painting.lua"],
     tags: ["flammable", "furniture", "wood"],
@@ -25,16 +22,15 @@
             ],
         ),
         parts: {
-            "bkg":      Sprite(bone: (name: "root"),   shape: Quad(w: 1.427, h: 1.427, d: 0.002),  material: "bkg", atlas_offset: (row: 0, col: 1)),
-            "frame":    Sprite(bone: (name: "root"),   shape: Quad(w: 1.427, h: 1.427, d: 0.001),  material: "frame"),
-            "painting": Sprite(bone: (name: "framed"), shape: Quad(w: 1., h: 1., one_sided: true), material: "painting"),
+            "bkg":      Sprite(bone: (name: "root"),   shape: Quad(w: 1.427, h: 1.427, d: 0.0001),  material: "bkg", atlas_offset: (row: 0, col: 1)),
+            "frame":    Sprite(bone: (name: "root"),   shape: Quad(w: 1.427, h: 1.427, d: 0.0002), material: "frame"),
+            "painting": Sprite(bone: (name: "framed"), shape: Quad(w: 1.,    h: 1.,    d: 0.0003, one_sided: true), material: "painting"),
         },
         materials: {
             "bkg": (
-                color:          "background",
                 atlas:          (rows: 1, columns: 2, width: 2048, height: 1024),
                 texture:        "props/furniture/painting_frame.png",
-                alpha_blend:    true,
+                color:          "background",
             ),
             "frame": (
                 atlas:          (rows: 1, columns: 2, width: 2048, height: 1024),
@@ -46,6 +42,7 @@
                 texture:        "props/furniture/paintings/blank.png",
                 alpha_blend:    true,
                 color:          "#785c3b",
+                reflectance:    0.01,
             ),
         },
     ),

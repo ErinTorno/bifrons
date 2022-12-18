@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, core_pipeline::bloom::BloomSettings};
 use serde::*;
 
 use crate::data::input::{ActionState, InputMap, InputTS, InputData};
@@ -59,10 +59,17 @@ pub fn setup_camera(
         
         commands.entity(entity)
             .remove::<ToInit<Camera3d>>()
-            .insert(Camera3dBundle {
-                transform: transform.unwrap_or(Transform::from_xyz(4.0, 4.0, 6.0).looking_at(Vec3::new(0., 2., 0.), Vec3::Y)),
-                ..default()
-            });
+            .insert((
+                Camera3dBundle {
+                    camera:     Camera { hdr: true,..default() },
+                    transform: transform.unwrap_or(Transform::from_xyz(4.0, 4.0, 6.0).looking_at(Vec3::new(0., 2., 0.), Vec3::Y)),
+                    ..default()
+                },
+                BloomSettings {
+                    intensity: 0.0001,
+                    ..default()
+                },
+            ));
     }
 }
 

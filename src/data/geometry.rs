@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{scripting::{color::RgbaColor, LuaMod, bevy_api::{math::LuaVec3, LuaEntity}}};
 
-use super::{material::*, lua::{LuaWorld, Any2}, palette::DynColor};
+use super::{material::*, lua::{LuaWorld, Any3}, palette::{DynColor, SingleColored}};
 
 #[derive(Clone, Debug)]
 pub struct AnimatedMesh {
@@ -591,6 +591,7 @@ impl Light {
             self.clone(),
             self.anim,
             LightAnimState { base_value: self.kind.value() },
+            SingleColored(self.color.clone()),
         ));
         if let Some(label) = &self.label {
             commands.insert(Name::new(label.clone()));
@@ -654,9 +655,12 @@ impl Light {
                 });
             },
         }
-        entity.insert(self.clone());
-        entity.insert(self.anim);
-        entity.insert(LightAnimState { base_value: self.kind.value() });
+        entity.insert((
+            self.clone(),
+            self.anim,
+            LightAnimState { base_value: self.kind.value() },
+            SingleColored(self.color.clone()),
+        ));
         if let Some(label) = &self.label {
             entity.insert(Name::new(label.clone()));
         }
@@ -670,9 +674,10 @@ impl LuaUserData for Light {
             Ok(())
         });
         fields.add_field_method_get("color", |_, this| Ok(this.color.clone()));
-        fields.add_field_method_set("color", |_, this, any: Any2<DynColor, RgbaColor>| Ok(match any {
-            Any2::A(c) => { this.color = c },
-            Any2::B(c) => { this.color = DynColor::Custom(c) },
+        fields.add_field_method_set("color", |_, this, any: Any3<DynColor, RgbaColor, String>| Ok(match any {
+            Any3::A(c) => { this.color = c },
+            Any3::B(c) => { this.color = DynColor::Custom(c) },
+            Any3::C(c) => { this.color = DynColor::Named(c) },
         }));
         fields.add_field_method_get("label", |_, this| Ok(this.label.clone()));
         fields.add_field_method_set("label", |_, this, label: Option<String>| {

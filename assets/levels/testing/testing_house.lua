@@ -22,7 +22,13 @@ function on_init()
 
     -- let's cause an infinite loop!
     -- Level.change("levels/testing/testing_house")
-    
+
+    -- Palette.load("palettes/black_and_white"):on_load(function(handle)
+    --     Palette.change(handle)
+    -- end)
+    -- Palette.load("palettes/black_and_white"):on_load(Palette.change)
+    -- Palette.load("palettes/default"):on_load(Palette.change)
+
     Level.spawn_piece("pieces/kitchen", {
         parent = entity,
         name   = "kitchen",

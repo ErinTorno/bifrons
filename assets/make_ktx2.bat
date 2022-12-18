@@ -7,5 +7,6 @@ toktx --t2 --target_type RGBA --zcmp --encode uastc items/shutter_lantern.ktx2 i
 
 toktx --t2 --target_type RGBA --zcmp --encode uastc props/paper.ktx2 props/paper.png
 toktx --t2 --target_type RGBA --zcmp --encode uastc props/paper_n.ktx2 props/paper_n.png
+toktx --t2 --target_type RGBA --zcmp --encode uastc props/bones/goat_skull_creepy.ktx2 props/bones/goat_skull_creepy.png
 
 toktx --t2 --target_type RGBA --zcmp --encode uastc props/furniture/painting_frame.ktx2 props/furniture/painting_frame.png

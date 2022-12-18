@@ -1,6 +1,6 @@
-use bevy::{prelude::*, render::{texture::ImageSampler, render_resource::{SamplerDescriptor, FilterMode, Extent3d, TextureDimension, TextureFormat}}, asset::LoadState};
+use bevy::{prelude::*, render::{texture::{ImageSampler}, render_resource::{SamplerDescriptor, FilterMode, Extent3d, TextureDimension, TextureFormat}}, asset::LoadState};
 
-use crate::data::{material::{TexMatInfo, MaterialColors, MaterialsToInit, TextureMaterial, LoadedMat}};
+use crate::data::{material::{TexMatInfo, MaterialColors, MaterialsToInit, TextureMaterial, LoadedMat, resolve_texture_path}};
 
 #[derive(Clone, Debug, Default)]
 pub struct TexturePlugin;
@@ -97,6 +97,7 @@ pub struct MissingTexture {
 }
 
 pub fn setup_default_textures(
+    // asset_server:     Res<AssetServer>,
     mut background:   ResMut<Background>,
     mut missing_tex:  ResMut<MissingTexture>,
     mut images:       ResMut<Assets<Image>>,
@@ -138,6 +139,7 @@ pub fn setup_default_textures(
         TextureFormat::Rgba8UnormSrgb,
     );
     missing_tex.image = images.add(image);
+    // missing_tex.image = asset_server.load(resolve_texture_path("missing.png", asset_server.as_ref()));
     missing_tex.material = materials.add(StandardMaterial {
         base_color_texture: Some(missing_tex.image.clone()),
         unlit: true,

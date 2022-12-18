@@ -3,6 +3,18 @@ use mlua::prelude::*;
 
 use crate::scripting::LuaMod;
 
+#[derive(Default)]
+pub struct MathAPI;
+impl LuaMod for MathAPI {
+    fn mod_name() -> &'static str { "Math" }
+    fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
+        table.set("clamp", lua.create_function(|_, (n, min, max): (f64, f64, f64)| {
+            Ok(n.clamp(min, max))
+        })?)?;
+        Ok(())
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LuaVec2(pub Vec2);
 impl LuaVec2 {

@@ -62,9 +62,9 @@ impl LuaUserData for MessageBuilder {
                         let si = w.get_resource::<SharedInstances>().unwrap();
                         si.by_path.get(&name).cloned()
                     } {
-                        for entity in entities {
+                        for entity in entities.keys() {
                             let mut w = world.write();
-                            if let Some(mut ent) = w.get_entity_mut(entity) {
+                            if let Some(mut ent) = w.get_entity_mut(*entity) {
                                 if let Some(mut queue) = ent.get_mut::<LuaQueue>() {
                                     queue.calls.push(HookCall::next_frame(Hook {
                                         name: this.hook_name.clone(), args: this.args.clone()

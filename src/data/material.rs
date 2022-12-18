@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{scripting::{LuaMod, color::RgbaColor, bevy_api::{LuaEntity, handle::LuaHandle}}};
 
-use super::{lua::{LuaWorld, Any2}, palette::{DynColor}};
+use super::{lua::{LuaWorld, Any3}, palette::{DynColor}};
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub enum RepeatType {
@@ -122,8 +122,8 @@ pub struct LoadedMaterials {
     pub by_name: HashMap<String, Handle<StandardMaterial>>,
 }
 
-pub fn resolve_texture_path(file: &String, asset_server: &AssetServer) -> PathBuf {
-    let path = PathBuf::from(file);
+pub fn resolve_texture_path<S>(file: S, asset_server: &AssetServer) -> PathBuf where S: Into<PathBuf> {
+    let path: PathBuf = file.into();
     if let Some("png") = path.extension().and_then(|s| s.to_str()) {
         let mut ktx2 = path.clone();
         ktx2.set_extension("ktx2");
@@ -131,7 +131,7 @@ pub fn resolve_texture_path(file: &String, asset_server: &AssetServer) -> PathBu
             return ktx2;
         }
     }
-    PathBuf::from(file)
+    path
 }
 
 pub fn resolve_and_load_texture(file: &String, asset_server: &AssetServer) -> Handle<Image> {
@@ -163,7 +163,7 @@ pub struct TextureMaterial {
     pub unlit:            bool,
 }
 fn default_emissive_color() -> DynColor { DynColor::Const(RgbaColor {r: 0., g: 0., b: 0., a: 1.}) }
-fn default_metallic() -> f32 { 0.5 }
+fn default_metallic() -> f32 { 0.01 }
 fn default_reflectance() -> f32 { 0.5 }
 fn default_alpha_blend() -> bool { false }
 impl TextureMaterial {
@@ -252,14 +252,16 @@ impl LuaUserData for TextureMaterial {
         fields.add_field_method_get("atlas", |_, this| Ok(this.atlas.clone()));
         fields.add_field_method_set("atlas", |_, this, atlas| Ok(this.atlas = atlas));
         fields.add_field_method_get("color", |_, this| Ok(this.color.clone()));
-        fields.add_field_method_set("color", |_, this, any: Any2<DynColor, RgbaColor>| Ok(match any {
-            Any2::A(c) => { this.color = c },
-            Any2::B(c) => { this.color = DynColor::Custom(c) },
+        fields.add_field_method_set("color", |_, this, any: Any3<DynColor, RgbaColor, String>| Ok(match any {
+            Any3::A(c) => { this.color = c },
+            Any3::B(c) => { this.color = DynColor::Custom(c) },
+            Any3::C(c) => { this.color = DynColor::Named(c) },
         }));
         fields.add_field_method_get("emissive_color", |_, this| Ok(this.emissive_color.clone()));
-        fields.add_field_method_set("emissive_color", |_, this, any: Any2<DynColor, RgbaColor>| Ok(match any {
-            Any2::A(c) => { this.emissive_color = c },
-            Any2::B(c) => { this.emissive_color = DynColor::Custom(c) },
+        fields.add_field_method_set("emissive_color", |_, this, any: Any3<DynColor, RgbaColor, String>| Ok(match any {
+            Any3::A(c) => { this.emissive_color = c },
+            Any3::B(c) => { this.emissive_color = DynColor::Custom(c) },
+            Any3::C(c) => { this.emissive_color = DynColor::Named(c) },
         }));
         fields.add_field_method_get("metallic", |_, this| Ok(this.metallic));
         fields.add_field_method_set("metallic", |_, this, metallic| Ok(this.metallic = metallic));
@@ -304,28 +306,36 @@ impl LuaUserData for TextureMaterial {
             let world = ctx.globals().get::<_, LuaWorld>("world").unwrap();
             let mut w = world.write();
             let tex_handles = {
-                let asset_server = w.get_resource::<AssetServer>();
-                if asset_server.is_none() { return Err(LuaError::RuntimeError(format!("Unable to get AssetServer"))); }
-                this.load_textures(asset_server.unwrap())
+                let asset_server = w.resource::<AssetServer>();
+                this.load_textures(asset_server)
             };
 
             let mat = {
-                let tex_mat_info = w.get_resource_mut::<TexMatInfo>();
-                if tex_mat_info.is_none() { return Err(LuaError::RuntimeError(format!("Unable to get TexMatInfo"))); }
-                let mut tex_mat_info = tex_mat_info.unwrap();
+                let mut tex_mat_info = w.resource_mut::<TexMatInfo>();
                 this.make_material(tex_handles, &mut tex_mat_info)
             };
-
-            let materials = w.get_resource_mut::<Assets<StandardMaterial>>();
-            if materials.is_none() { return Err(LuaError::RuntimeError(format!("Unable to get Assets<StandardMaterial>"))); }
-            let mut materials = materials.unwrap();
-
-            if let Some(cur) = materials.get_mut(&mat_handle.handle.clone().typed_weak()) {
-                *cur = mat;
-                Ok(())
-            } else {
-                Err(LuaError::RuntimeError(format!("No material was found associated with handle {:?}", mat_handle.handle)))
+            let handle = mat_handle.handle.clone().typed_weak();
+            {
+                let mut materials = w.resource_mut::<Assets<StandardMaterial>>();
+                if let Some(cur) = materials.get_mut(&handle) {
+                    *cur = mat;
+                } else {
+                    return Err(LuaError::RuntimeError(format!("No material was found associated with handle {:?}", handle)));
+                }
             }
+            {
+                let mut mats_to_init = w.resource_mut::<MaterialsToInit>();
+                mats_to_init.0.insert(handle.clone_weak());
+            }
+            {
+                let mut material_colors = w.resource_mut::<MaterialColors>();
+                if let Some(loaded) = material_colors.by_handle.get_mut(&handle) {
+                    loaded.tex_mat = this.clone();
+                } else {
+                    material_colors.by_handle.insert(handle.clone_weak(), LoadedMat { handle: handle.clone_weak(), tex_mat: this.clone() });
+                }
+            }
+            Ok(())
         });
     }
 }

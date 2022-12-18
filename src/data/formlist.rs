@@ -4,7 +4,7 @@ use bevy::{prelude::*, asset::{LoadContext, AssetLoader, LoadedAsset}, utils::Bo
 use mlua::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::{scripting::{LuaMod, random::random_range, bevy_api::handle::LuaHandle}, system::common::fix_missing_extension};
+use crate::{scripting::{LuaMod, random::random_range, bevy_api::handle::LuaHandle}, system::common::fix_missing_extension, util::serialize::ron_options};
 
 use super::lua::{LuaWorld, LuaScriptVars};
 
@@ -308,7 +308,7 @@ impl AssetLoader for FormListLoader {
         load_context: &'a mut LoadContext,
     ) -> BoxedFuture<'a, Result<(), bevy::asset::Error>> {
         Box::pin(async move {
-            let list: FormList = ron::de::from_bytes(bytes)?;
+            let list: FormList = ron_options().from_bytes(bytes)?;
             load_context.set_default_asset(LoadedAsset::new(list));
             Ok(())
         })

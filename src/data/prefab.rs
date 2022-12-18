@@ -1,6 +1,8 @@
 use bevy::{asset::*, prelude::*, reflect::TypeUuid, utils::{HashMap, HashSet}};
 use serde::{Deserialize, Serialize};
 
+use crate::util::serialize::ron_options;
+
 use super::{anim::Animation, lang::Lines, item::Item, stat::Attributes, lua::LuaScriptVars};
 
 #[derive(Clone, Component, Debug)]
@@ -34,7 +36,7 @@ impl AssetLoader for PrefabLoader {
         load_context: &'a mut LoadContext,
     ) -> BoxedFuture<'a, Result<(), bevy::asset::Error>> {
         Box::pin(async move {
-            let prefab: Prefab = ron::de::from_bytes(bytes)?;
+            let prefab: Prefab = ron_options().from_bytes(bytes)?;
             load_context.set_default_asset(LoadedAsset::new(prefab));
             Ok(())
         })

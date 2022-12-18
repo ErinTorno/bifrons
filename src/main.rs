@@ -3,6 +3,7 @@
 #![feature(hash_drain_filter)]
 #![feature(hash_raw_entry)]
 #![feature(iter_intersperse)]
+#![feature(let_chains)]
 
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_kira_audio::prelude::*;
@@ -25,7 +26,7 @@ fn main() {
         // misc
         .add_plugin(AudioPlugin)
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
-        .add_plugin(RapierDebugRenderPlugin::default())
+        // .add_plugin(RapierDebugRenderPlugin::default()) if enabled, must disable HDR/bloom
         .add_plugin(system::action::ActionPlugin)
         .add_plugin(system::anim::AnimPlugin)
         .add_plugin(system::camera::CameraPlugin)
