@@ -16,7 +16,7 @@ impl Plugin for PrefabPlugin {
     }
 }
 
-#[derive(Clone, Component, Copy, Debug, InspectorOptions)]
+#[derive(Clone, Component, Copy, Debug, Inspectable)]
 pub struct Player {
     pub id: u32,
 }

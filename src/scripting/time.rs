@@ -7,7 +7,7 @@ use crate::data::lua::LuaWorld;
 
 use super::{LuaMod};
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, InspectorOptions, PartialEq, Resource, Serialize, Reflect)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Inspectable, PartialEq, Resource, Serialize, Reflect)]
 pub struct LuaTime {
     #[serde(default)]
     pub delta:   f64,
@@ -37,7 +37,7 @@ impl LuaMod for LuaTime {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, InspectorOptions, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Inspectable, PartialEq, Serialize)]
 pub struct LuaTimer {
     #[serde(default)]
     pub start:    f64,

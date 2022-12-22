@@ -1,5 +1,7 @@
 (
     background: "black",
     on_miss:    Fn(file: "palettes/scripts/common.lua", function: "desaturate"),
-    colors:     {},
+    colors:     {
+        "black": "#000000",
+    },
 )

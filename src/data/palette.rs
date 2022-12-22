@@ -5,6 +5,8 @@ use bevy::{prelude::*, reflect::TypeUuid, utils::BoxedFuture, asset::*};
 use bevy_inspector_egui::prelude::*;
 use lazy_static::lazy_static;
 use mlua::prelude::*;
+use palette::{Lcha, FromColor};
+use palette::rgb::Rgba;
 use serde::{de, Serializer};
 use serde::{de::*, Deserialize, Serialize};
 
@@ -20,7 +22,7 @@ use crate::util::serialize::ron_options;
 
 use super::lua::{ManyScriptVars, Any2, LuaWorld, LuaReadable, InstanceRef};
 
-#[derive(Clone, Component, Debug, Default, Eq, FromReflect, Hash, PartialEq, Reflect)]
+#[derive(Clone, Component, Debug, Default, Eq, FromReflect, Hash, Inspectable, PartialEq, Reflect)]
 pub enum DynColor {
     #[default]
     Background,
@@ -123,8 +125,15 @@ impl Serialize for DynColor {
     }
 }
 impl LuaUserData for DynColor {
-    fn add_fields<'lua, F: LuaUserDataFields<'lua, Self>>(_fields: &mut F) {
-        
+    fn add_fields<'lua, F: LuaUserDataFields<'lua, Self>>(fields: &mut F) {
+        fields.add_field_method_get("kind", |_, this| {
+            Ok(match this {
+                DynColor::Background => "background",
+                DynColor::Const(_)   => "const",
+                DynColor::Custom(_)  => "custom",
+                DynColor::Named(_)   => "named",
+            })
+        });
     }
 
     fn add_methods<'lua, M: LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
@@ -164,8 +173,8 @@ impl LuaMod for DynColor {
     }
 }
 
-#[derive(Clone, Component, Debug, Default, Deserialize, InspectorOptions, PartialEq, Reflect, Serialize)]
-#[reflect(Component, InspectorOptions)]
+#[derive(Clone, Component, Debug, Default, Deserialize, Inspectable, PartialEq, Reflect, Serialize)]
+#[reflect(Component)]
 pub struct SingleColored(pub DynColor);
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -203,6 +212,7 @@ pub struct Palette {
     pub background:    DynColor,
     pub missing_color: RgbaColor,
     pub colors:        HashMap<String, Color>,
+    pub colors_lch:    HashMap<String, Lcha>,
 }
 lazy_static! {
     static ref DEFAULT_PALETTE: Palette = {
@@ -246,10 +256,16 @@ impl<'de> Deserialize<'de> for Palette {
             })?;
             colors.insert(k, c.clone());
         }
+        let colors_lch = colors.iter().map(|(k, v)| {
+            let [r, g, b, a] = v.as_rgba_f32();
+            let rgba: Rgba = Rgba::new(r, g, b, a);
+            (k.clone(), Lcha::from_color(rgba))
+        }).collect();
         Ok(Palette {
             handle: default(), // must be immediately set when to actual value palette is loaded
             base: config.base.clone(),
             colors,
+            colors_lch,
             background: config.background,
             missing_color: config.missing_color,
             on_miss: config.on_miss.clone(),

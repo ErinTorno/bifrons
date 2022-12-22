@@ -1,6 +1,7 @@
 use std::{collections::{hash_map::RawEntryMut, HashMap}, f32::consts::PI};
 
 use bevy::{prelude::*, input::mouse::{MouseWheel, MouseMotion}, window::CursorGrabMode};
+use bevy_inspector_egui::RegisterInspectable;
 
 use crate::{data::input::*, util::Timestamped};
 
@@ -11,6 +12,10 @@ impl Plugin for ActionPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         app
             .add_system(update_action_state)
+            .register_inspectable::<ActionState>()
+            .register_inspectable::<InputData>()
+            .register_inspectable::<InputTime>()
+            .register_inspectable::<InputTS>()
         ;
     }
 }

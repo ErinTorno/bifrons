@@ -1,7 +1,7 @@
 use std::{sync::Arc, collections::{HashMap}};
 
 use bevy::{asset::*, prelude::*, reflect::{TypeUuid}};
-use bevy_inspector_egui::InspectorOptions;
+use bevy_inspector_egui::Inspectable;
 use mlua::prelude::*;
 use parking_lot::{
     MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock, RwLockReadGuard, RwLockWriteGuard,
@@ -116,10 +116,9 @@ impl AssetLoader for LuaScriptLoader {
     }
 }
 
-#[derive(Clone, Debug, FromReflect, Reflect)]
+#[derive(Clone, Debug, Inspectable)]
 pub struct Hook {
     pub name: String,
-    #[reflect(ignore)]
     pub args: ManyScriptVars,
 }
 impl Hook {
@@ -200,7 +199,7 @@ impl LuaReadable for Lua {
 /* ********* */
 // Ref-free lua values for serialization and transfer between instances
 
-#[derive(Clone, Debug, Default, Deserialize, InspectorOptions, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Inspectable, PartialEq, Serialize)]
 pub enum ScriptVar {
     AnyUserTable(Vec<(ScriptVar, ScriptVar)>),
     Array(Vec<ScriptVar>),
@@ -334,7 +333,7 @@ impl<V> From<Vec<V>> for ScriptVar where V: Clone + Into<ScriptVar> {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, InspectorOptions, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Inspectable, PartialEq, Serialize)]
 pub struct ManyScriptVars(pub Vec<ScriptVar>);
 impl<'lua> ToLuaMulti<'lua> for ManyScriptVars {
     fn to_lua_multi(self, lua: &'lua Lua) -> Result<LuaMultiValue<'lua>, LuaError> {
@@ -371,7 +370,7 @@ impl<A, B, C, D, E> Into<ManyScriptVars> for (A, B, C, D, E) where A: Into<Scrip
     }
 }
 
-#[derive(Clone, Component, Debug, Default, Deserialize, InspectorOptions, PartialEq, Serialize)]
+#[derive(Clone, Component, Debug, Default, Deserialize, Inspectable, PartialEq, Serialize)]
 pub struct LuaScriptVars(pub std::collections::HashMap<String, ScriptVar>);
 
 impl LuaScriptVars {

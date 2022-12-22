@@ -1,14 +1,16 @@
 use std::hash::{Hash, Hasher};
 
 use bevy::{prelude::{ClearColor, Color}, reflect::{Reflect, FromReflect}};
+use bevy_inspector_egui::Inspectable;
 use mlua::prelude::*;
+use palette::*;
 use serde::{de, Serialize, Deserialize, Deserializer, Serializer};
 
 use crate::{util::IntoHex, data::lua::LuaWorld};
 
 use super::LuaMod;
 
-#[derive(Clone, Copy, Debug, Default, FromReflect, PartialEq, Reflect)]
+#[derive(Clone, Copy, Debug, Default, FromReflect, Inspectable, PartialEq, Reflect)]
 pub struct RgbaColor {
     pub r: f32,
     pub g: f32,
@@ -133,3 +135,32 @@ impl IntoHex for RgbaColor {
         Color::from(self.clone()).into_hex()
     }
 }
+// impl Into<RgbaColor> for Lcha {
+//     fn into(self) -> RgbaColor {
+//         let rgba: Rgba = Rgba::new(self.r, self.g, self.b, self.a);
+//         Lcha::from_color(rgba)
+//     }
+// }
+impl Clamp for RgbaColor {
+    fn clamp(&self) -> Self {
+        RgbaColor { r: self.r.clamp(0., 1.), g: self.g.clamp(0., 1.), b: self.b.clamp(0., 1.), a: self.a.clamp(0., 1.) }
+    }
+
+    fn is_within_bounds(&self) -> bool {
+        self.r >= 0. && self.r <= 1. &&
+        self.g >= 0. && self.g <= 1. &&
+        self.b >= 0. && self.b <= 1. &&
+        self.a >= 0. && self.a <= 1.
+    }
+    
+    fn clamp_self(&mut self) {
+        self.r = self.r.clamp(0., 1.);
+        self.g = self.g.clamp(0., 1.);
+        self.b = self.b.clamp(0., 1.);
+        self.a = self.a.clamp(0., 1.);
+    }
+}
+
+// #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+// pub struct LuaOklab(pub Oklaba);
+

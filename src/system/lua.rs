@@ -4,13 +4,13 @@ use std::{collections::{HashMap, HashSet}};
 use bevy::asset::LoadState;
 use bevy::ecs::system::SystemState;
 use bevy::{prelude::*};
-use bevy_inspector_egui::InspectorOptions;
+use bevy_inspector_egui::{RegisterInspectable, Inspectable};
 use iyes_loopless::prelude::FixedTimestepStage;
 use mlua::prelude::*;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 
-use crate::data::lua::{LuaScript, LuaScriptLoader, InstanceKind, InstanceRef, Hook, LuaWorld, Recipient};
+use crate::data::lua::{LuaScript, LuaScriptLoader, InstanceKind, InstanceRef, Hook, LuaWorld, Recipient, ScriptVar, LuaScriptVars, ManyScriptVars};
 use crate::scripting::event::{constants, ON_UPDATE, ON_INIT};
 use crate::scripting::register_lua_mods;
 use crate::scripting::registry::{Registry, AssetEventKey};
@@ -47,17 +47,20 @@ impl Plugin for LuaPlugin {
                 "on_queue_collect",
                 on_queue_collect,
             )
-            .register_type::<HookCall>()
             .register_type::<InstanceKind>()
             .register_type::<LuaScript>()
-            .register_type::<LuaQueue>()
+            .register_inspectable::<Hook>()
+            .register_inspectable::<HookCall>()
+            .register_inspectable::<LuaScriptVars>()
+            .register_inspectable::<ManyScriptVars>()
+            .register_inspectable::<ScriptVar>()
         ;
     }
 }
 
-#[derive(Clone, Debug, FromReflect, Reflect)]
+#[derive(Clone, Debug, Inspectable)]
 pub struct HookCall {
-    #[reflect(ignore)]
+    #[inspectable(ignore)]
     pub script_ids: HashSet<u32>,
     pub hook:       Hook,
 }
@@ -65,7 +68,7 @@ impl HookCall {
     pub fn next_frame(hook: Hook) -> Self { HookCall { script_ids: HashSet::singleton(SharedInstances::COLLECTIVIST_ID), hook }}
 }
 
-#[derive(Clone, Component, Debug, Default, Reflect)]
+#[derive(Clone, Component, Debug, Default)]
 pub struct LuaQueue {
     pub calls: Vec<HookCall>,
 }
@@ -76,7 +79,7 @@ pub struct LuaInstance {
     pub result:    Result<InstanceRef, LuaError>,
 }
 
-#[derive(Clone, Component, Debug, Default, Deserialize, InspectorOptions, PartialEq, Serialize)]
+#[derive(Clone, Component, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct ScriptRefs {
     pub ids: HashSet<u32>,
 

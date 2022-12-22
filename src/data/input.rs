@@ -31,7 +31,7 @@ pub enum InputCode {
     Joystick    { side: JoystickSide, angle: f32, sensitivity: f32 },
 }
 
-#[derive(Clone, Debug, InspectorOptions, PartialEq)]
+#[derive(Clone, Debug, Inspectable, PartialEq)]
 pub enum InputData {
     Binary      { pressed: bool },
     Analog      { state: f32, },
@@ -70,7 +70,7 @@ impl Default for InputData {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, InspectorOptions, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Inspectable, PartialEq)]
 pub enum InputTime {
     #[default]
     NotPressed,
@@ -132,7 +132,7 @@ impl InputTime {
     }
 }
 
-#[derive(Clone, Debug, Default, InspectorOptions, PartialEq)]
+#[derive(Clone, Debug, Default, Inspectable, PartialEq)]
 pub struct InputTS {
     pub data: InputData,
     pub time: InputTime,
@@ -248,7 +248,7 @@ impl LuaUserData for InputTS {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, InspectorOptions, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Inspectable, PartialEq)]
 pub enum CameraType {
     #[default]
     Following, // follows the player
@@ -265,7 +265,7 @@ impl CameraType {
     }
 }
 
-#[derive(Clone, Component, Debug, Default, InspectorOptions, PartialEq)]
+#[derive(Clone, Component, Debug, Default, Inspectable, PartialEq)]
 pub struct ActionState {
     pub gamepad_id: Option<usize>,
     pub camera:     CameraType,

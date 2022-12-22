@@ -446,8 +446,8 @@ impl LuaMod for LightKind {
     }
 }
 
-#[derive(Clone, Component, Copy, Debug, Deserialize, InspectorOptions, PartialEq, Reflect, Serialize)]
-#[reflect(Component, InspectorOptions)]
+#[derive(Clone, Component, Copy, Debug, Deserialize, Inspectable, PartialEq, Reflect, Serialize)]
+#[reflect(Component)]
 pub enum LightAnim {
     Constant {
         mul: f32,
@@ -489,8 +489,8 @@ impl LuaMod for LightAnim {
         Ok(())
     }
 }
-#[derive(Clone, Component, Copy, Debug, Default, Deserialize, InspectorOptions, PartialEq, Reflect, Serialize)]
-#[reflect(Component, InspectorOptions)]
+#[derive(Clone, Component, Copy, Debug, Default, Deserialize, Inspectable, PartialEq, Reflect, Serialize)]
+#[reflect(Component)]
 pub struct LightAnimState {
     pub base_value: f32,
 }

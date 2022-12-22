@@ -1,6 +1,6 @@
-use std::{path::{PathBuf}};
+use std::{path::{PathBuf}, collections::{HashMap, HashSet}};
 
-use bevy::{prelude::*, render::{render_resource::{AddressMode, SamplerDescriptor, FilterMode}, texture::ImageSampler}, utils::{HashMap, HashSet}};
+use bevy::{prelude::*, render::{render_resource::{AddressMode, SamplerDescriptor, FilterMode}, texture::ImageSampler}};
 use bevy_inspector_egui::prelude::*;
 use mlua::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -117,7 +117,7 @@ impl LuaMod for Atlas {
     }
 }
 
-#[derive(Clone, Component, Debug, Default, InspectorOptions)]
+#[derive(Clone, Component, Debug, Default, Inspectable)]
 pub struct LoadedMaterials {
     pub by_name: HashMap<String, Handle<StandardMaterial>>,
 }

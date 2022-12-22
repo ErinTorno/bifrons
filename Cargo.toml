@@ -7,7 +7,7 @@ license-file = "agpl-3.0.txt"
 [dependencies]
 bevy = { version = "0.9.1", default-features = false, features = ["animation", "basis-universal", "bevy_asset", "bevy_gilrs", "bevy_gltf", "bevy_scene", "bevy_winit", "ktx2", "render", "png", "serialize", "x11", "zlib", "zstd"] }
 bevy_egui = "0.17.1"
-bevy-inspector-egui = "0.15.0-pre.0"
+bevy-inspector-egui = "0.15.0"
 bevy_kira_audio = { version = "0.13.0", features = ["flac", "ogg"] }
 bytemuck = "1.12.1"
 byteorder = "1.4.3"
@@ -28,3 +28,4 @@ rand = "0.8.5"
 rand_chacha = "0.3.1"
 lazy_static = "1.4.0"
 parking_lot = "0.12.1"
+palette = "0.6.1"

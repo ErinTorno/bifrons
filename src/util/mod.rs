@@ -17,13 +17,10 @@ impl IntoHex for Color {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Inspectable, PartialEq)]
 pub struct Timestamped<T> {
     pub time:  f64,
     pub value: T,
-}
-impl<T> From<Timestamped<T>> for InspectorOptions {
-    fn from(_: Timestamped<T>) -> Self { InspectorOptions::default() }
 }
 
 pub fn pair_clone<A, B>((a, b): (&A, &B)) -> (A, B) where A: Clone, B: Clone {

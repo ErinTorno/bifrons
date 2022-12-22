@@ -14,10 +14,9 @@
         frames: {
             "idle": [],
         },
-        skeleton: (name: "root"),
         parts: {
-            "bkg": Sprite(bone: (name: "root"), shape: Quad(w: 0.177, h: 0.4), material: "bkg",  atlas_offset: (row: 0, col: 1)),
-            "out": Sprite(bone: (name: "root"), shape: Quad(w: 0.177, h: 0.4), material: "out"),
+            "bkg": Sprite(shape: Quad(w: 0.177, h: 0.4), material: "bkg",  atlas_offset: (row: 0, col: 1)),
+            "out": Sprite(shape: Quad(w: 0.177, h: 0.4), material: "out"),
         },
         materials: {
             "out": (
@@ -30,7 +29,6 @@
             "bkg": (
                 color:            "background",
                 texture:          "items/cleaver.png",
-                alpha_blend:      true,
                 atlas:            (rows: 1, columns: 2, width: 430, height: 768),
             ),
         },

@@ -1,6 +1,7 @@
 use std::f32::consts::PI;
 
 use bevy::{prelude::*};
+use bevy_inspector_egui::RegisterInspectable;
 
 use crate::data::geometry::{LightAnim, LightAnimState, Light};
 
@@ -13,6 +14,8 @@ impl Plugin for AnimPlugin {
             .register_type::<Light>()
             .register_type::<LightAnim>()
             .register_type::<LightAnimState>()
+            .register_inspectable::<LightAnim>()
+            .register_inspectable::<LightAnimState>()
             .add_system(anim_lights)
         ;
     }

@@ -1,7 +1,5 @@
 function on_init()
     Log.info("testing_house.lua on_init ran on behalf of {}; loaded at {} seconds", Level.name(), Time.elapsed())
-    Log.info("testing format {}, {}, {}, {}, and {}, and {}, and entity {}", 1, 3.14, 'str', true, {x = 5, y = 10}, Rgba.hex("921b4b"), entity)
-    
     -- local light = Light.new(LightKind.point(1600, 20, 0))
     -- local light = Light.new(LightKind.directional(28000.0, 10000.0))
     -- local light = Light.new(LightKind.default_spotlight(Vec3.new(0, 0, 0)))
@@ -26,7 +24,7 @@ function on_init()
     -- Palette.load("palettes/black_and_white"):on_load(function(handle)
     --     Palette.change(handle)
     -- end)
-    -- Palette.load("palettes/black_and_white"):on_load(Palette.change)
+    Palette.load("palettes/black_and_white"):on_load(Palette.change)
     -- Palette.load("palettes/default"):on_load(Palette.change)
 
     Level.spawn_piece("pieces/kitchen", {
