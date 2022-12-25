@@ -1,9 +1,10 @@
 use std::hash::{Hash, Hasher};
 
 use bevy::{prelude::{ClearColor, Color}, reflect::{Reflect, FromReflect}};
+use bevy_egui::{egui};
 use bevy_inspector_egui::Inspectable;
 use mlua::prelude::*;
-use palette::*;
+use palette::{*, convert::FromColorUnclamped, rgb::{Rgba}};
 use serde::{de, Serialize, Deserialize, Deserializer, Serializer};
 
 use crate::{util::IntoHex, data::lua::LuaWorld};
@@ -20,7 +21,7 @@ pub struct RgbaColor {
 impl RgbaColor {
     pub const BLACK:   RgbaColor = RgbaColor {r: 0., g: 0., b: 0., a: 1.};
     pub const WHITE:   RgbaColor = RgbaColor {r: 1., g: 1., b: 1., a: 1.};
-    pub const FUSCHIA: RgbaColor = RgbaColor {r: 0.56, g: 0.34, b: 0.64, a: 1.};
+    pub const FUCHSIA: RgbaColor = RgbaColor {r: 0.56, g: 0.34, b: 0.64, a: 1.};
 }
 impl Eq for RgbaColor {}
 impl Hash for RgbaColor {
@@ -130,6 +131,11 @@ impl From<RgbaColor> for Color {
         Color::Rgba { red: c.r, green: c.g, blue: c.b, alpha: c.a }
     }
 }
+impl From<RgbaColor> for egui::Color32 {
+    fn from(value: RgbaColor) -> Self {
+        egui::Rgba::from_rgba_premultiplied(value.r, value.g, value.b, value.a).into()
+    }
+}
 impl IntoHex for RgbaColor {
     fn into_hex(&self) -> String {
         Color::from(self.clone()).into_hex()
@@ -158,6 +164,51 @@ impl Clamp for RgbaColor {
         self.g = self.g.clamp(0., 1.);
         self.b = self.b.clamp(0., 1.);
         self.a = self.a.clamp(0., 1.);
+    }
+}
+impl FromColorUnclamped<Color> for RgbaColor {
+    fn from_color_unclamped(val: Color) -> Self {
+        let [r, g, b, a] = val.as_rgba_f32();
+        RgbaColor { r, g, b, a }
+    }
+}
+impl FromColorUnclamped<Lcha> for RgbaColor {
+    fn from_color_unclamped(val: Lcha) -> Self {
+        let val: Rgba = Rgba::from_color(val);
+        RgbaColor { r: val.red, g: val.green, b: val.blue, a: val.alpha }
+    }
+}
+impl FromColorUnclamped<Oklcha> for RgbaColor {
+    fn from_color_unclamped(val: Oklcha) -> Self {
+        let val: Rgba = Rgba::from_color(val);
+        RgbaColor { r: val.red, g: val.green, b: val.blue, a: val.alpha }
+    }
+}
+impl FromColorUnclamped<Rgba> for RgbaColor {
+    fn from_color_unclamped(val: Rgba) -> Self {
+        RgbaColor { r: val.red, g: val.green, b: val.blue, a: val.alpha }
+    }
+}
+impl FromColorUnclamped<RgbaColor> for Color {
+    fn from_color_unclamped(val: RgbaColor) -> Self {
+        val.into()
+    }
+}
+impl FromColorUnclamped<RgbaColor> for Lcha {
+    fn from_color_unclamped(val: RgbaColor) -> Self {
+        let rgba: Rgba = Rgba::from_color(val);
+        Lcha::from_color(rgba)
+    }
+}
+impl FromColorUnclamped<RgbaColor> for Oklcha {
+    fn from_color_unclamped(val: RgbaColor) -> Self {
+        let rgba: Rgba = Rgba::from_color(val);
+        Oklcha::from_color(rgba)
+    }
+}
+impl FromColorUnclamped<RgbaColor> for Rgba {
+    fn from_color_unclamped(val: RgbaColor) -> Self {
+        Rgba::new(val.r, val.g, val.b, val.a)
     }
 }
 

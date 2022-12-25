@@ -1,9 +1,10 @@
 use bevy::{prelude::*, core_pipeline::bloom::BloomSettings};
+use iyes_loopless::prelude::IntoConditionalSystem;
 use serde::*;
 
 use crate::data::input::{ActionState, InputMap, InputTS, InputData};
 
-use super::common::ToInit;
+use super::{common::ToInit, ui};
 
 #[derive(Clone, Debug, Default)]
 pub struct CameraPlugin;
@@ -13,7 +14,7 @@ impl Plugin for CameraPlugin {
         app
             .register_type::<Focus>()
             .add_system(setup_camera)
-            .add_system(cam_movement)
+            .add_system(cam_movement.run_if_not(ui::is_ui_focused))
             // .add_system(follow_system)
         ;
     }

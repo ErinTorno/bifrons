@@ -19,7 +19,13 @@ A co-op exploration horror game using Bevy and written in Rust.
 #### Abbie Gonzalez ([SIL-OFL](https://github.com/antijingoist/opendyslexic/blob/master/OFL.txt))
 - [OpenDyslexic](https://opendyslexic.org/) as **assets/fonts/OpenDyslexic-Regular.otf** and in logo
 
+#### Ubuntu ([Ubuntu font licence](https://ubuntu.com/legal/font-licence))
+- [Ubuntu Monospace](https://design.ubuntu.com/font/) as **assets/fonts/UbuntuMono-R.ttf**
+
 ### Palette
+
+#### Polyducks
+- [Japanese Woodblock Palette](https://lospec.com/palette-list/japanese-woodblock) as **assets/palettes/woodblock.palette.ron**
 
 #### Toby_Yasha
 - [TY - MURDER MYSTERY 16 PALETTE](https://lospec.com/palette-list/ty-murder-mystery-16) as inspiration for **assets/palettes/default.palette.ron**

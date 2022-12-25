@@ -5,8 +5,7 @@ use bevy::{prelude::*, reflect::TypeUuid, utils::BoxedFuture, asset::*};
 use bevy_inspector_egui::prelude::*;
 use lazy_static::lazy_static;
 use mlua::prelude::*;
-use palette::{Lcha, FromColor};
-use palette::rgb::Rgba;
+use palette::{ColorDifference, Lcha, FromColor};
 use serde::{de, Serializer};
 use serde::{de::*, Deserialize, Serialize};
 
@@ -20,7 +19,7 @@ use crate::system::palette::LoadingPalette;
 use crate::util::IntoHex;
 use crate::util::serialize::ron_options;
 
-use super::lua::{ManyScriptVars, Any2, LuaWorld, LuaReadable, InstanceRef};
+use super::lua::{ManyTransVars, Any2, LuaWorld, LuaReadable, InstanceRef, Any3, TransVar};
 
 #[derive(Clone, Component, Debug, Default, Eq, FromReflect, Hash, Inspectable, PartialEq, Reflect)]
 pub enum DynColor {
@@ -31,22 +30,23 @@ pub enum DynColor {
     Named(String),
 }
 impl DynColor {
-    pub const CONST_BLACK: DynColor = DynColor::Const(RgbaColor {r: 0., g: 0., b: 0., a: 1.});
-    pub const CONST_WHITE: DynColor = DynColor::Const(RgbaColor {r: 1., g: 1., b: 1., a: 1.});
+    pub const CONST_BLACK:   DynColor = DynColor::Const(RgbaColor {r: 0., g: 0., b: 0., a: 1.});
+    pub const CONST_FUCHSIA: DynColor = DynColor::Const(RgbaColor::FUCHSIA);
+    pub const CONST_WHITE:   DynColor = DynColor::Const(RgbaColor {r: 1., g: 1., b: 1., a: 1.});
 
     pub fn placeholder(&self) -> Color {
         match self {
             DynColor::Background   => Color::BLACK,
             DynColor::Const(rgba)  => rgba.clone().into(),
             DynColor::Custom(rgba) => rgba.clone().into(),
-            DynColor::Named(nm)    => DEFAULT_PALETTE.colors.get(nm).cloned().unwrap_or(Color::FUCHSIA),
+            DynColor::Named(nm)    => DEFAULT_PALETTE.colors.get(nm).cloned().unwrap_or(RgbaColor::FUCHSIA).into(),
         }
     }
 
     pub fn eval_lua(&self, lua: &Lua) -> RgbaColor {
         fn fuchsia_err() -> RgbaColor {
             error!("DynColor lua eval'ed but palettes asset was not yet loaded; using placeholder fuschia");
-            RgbaColor::FUSCHIA
+            RgbaColor::FUCHSIA
         }
 
         match self {
@@ -169,6 +169,12 @@ impl LuaMod for DynColor {
                 Any2::B(dcol) => dcol.eval_lua(lua),
             }))
         })?)?;
+        let meta = table.get_metatable().unwrap_or(lua.create_table()?);
+        meta.set(LuaMetaMethod::Call.name(), lua.create_function(|_, (_this, str): (LuaTable, String)| {
+            DynColor::from_str(str.as_str())
+                .map_err(|e| mlua::Error::RuntimeError(e))
+        })?)?;
+        table.set_metatable(Some(meta));
         Ok(())
     }
 }
@@ -186,8 +192,9 @@ pub enum ColorMiss {
         file: String,
         function: String,
         #[serde(default)]
-        params: ManyScriptVars,
+        params: Vec<ScriptVar>,
     },
+    Const(RgbaColor),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -201,7 +208,7 @@ pub struct PaletteConfig {
     pub missing_color: RgbaColor,
     pub colors:        HashMap<String, String>,
 }
-pub fn default_missing_color() -> RgbaColor { RgbaColor::FUSCHIA }
+pub fn default_missing_color() -> RgbaColor { RgbaColor::FUCHSIA }
 
 #[derive(Clone, Debug, PartialEq, TypeUuid)]
 #[uuid = "f1c78ac4-576b-4504-85b6-96e5bf3bd9e1"]
@@ -210,8 +217,9 @@ pub struct Palette {
     pub base:          Option<String>,
     pub on_miss:       ColorMiss,
     pub background:    DynColor,
+    pub background_original: DynColor,
     pub missing_color: RgbaColor,
-    pub colors:        HashMap<String, Color>,
+    pub colors:        HashMap<String, RgbaColor>,
     pub colors_lch:    HashMap<String, Lcha>,
 }
 lazy_static! {
@@ -227,6 +235,19 @@ impl Palette {
             _ => None,
         }
     }
+
+    pub fn clamp<C>(&self, c: C) -> C where C: FromColor<Lcha>, Lcha: FromColor<C> {
+        let mut lch = Lcha::from_color(c);
+        let mut dist = f32::MAX;
+        for color in self.colors_lch.values() {
+            let ndist = color.get_color_difference(&lch);
+            if ndist < dist {
+                dist = ndist;
+                lch = *color;
+            }
+        }
+        C::from_color(lch)
+    }
 }
 impl Default for Palette {
     fn default() -> Self {
@@ -235,7 +256,7 @@ impl Default for Palette {
 }
 impl<'de> Deserialize<'de> for Palette {
     fn deserialize<D>(d: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
-        let mut colors = HashMap::new();
+        let mut colors = HashMap::<String, RgbaColor>::new();
         let mut color_refs = HashMap::new();
         let config: PaletteConfig = Deserialize::deserialize(d)?;
         if config.background == DynColor::Background {
@@ -245,7 +266,7 @@ impl<'de> Deserialize<'de> for Palette {
             match full.chars().next().ok_or_else(|| de::Error::custom("Color string cannot be empty"))? {
                 '#' => {
                     let c = Color::hex(&full[1..].to_string()).map_err(|e| de::Error::custom(e))?;
-                    colors.insert(k, c);
+                    colors.insert(k, c.into());
                 },
                 _ => { color_refs.insert(k, full); },
             }
@@ -256,27 +277,44 @@ impl<'de> Deserialize<'de> for Palette {
             })?;
             colors.insert(k, c.clone());
         }
-        let colors_lch = colors.iter().map(|(k, v)| {
-            let [r, g, b, a] = v.as_rgba_f32();
-            let rgba: Rgba = Rgba::new(r, g, b, a);
-            (k.clone(), Lcha::from_color(rgba))
-        }).collect();
+        let colors_lch = colors.iter().map(|(k, v)| (k.clone(), Lcha::from_color(*v))).collect();
         Ok(Palette {
             handle: default(), // must be immediately set when to actual value palette is loaded
             base: config.base.clone(),
             colors,
             colors_lch,
-            background: config.background,
+            background: config.background.clone(),
+            background_original: config.background,
             missing_color: config.missing_color,
             on_miss: config.on_miss.clone(),
         })
     }
 }
 impl LuaUserData for Palette {
-    fn add_fields<'lua, F: mlua::UserDataFields<'lua, Self>>(_fields: &mut F) {
+    fn add_fields<'lua, F: mlua::UserDataFields<'lua, Self>>(fields: &mut F) {
+        fields.add_field_method_get("background", |_, this| Ok(this.background.clone()));
+        fields.add_field_method_set("background", |_, this, any: Any3<DynColor, RgbaColor, String>| Ok(match any {
+            Any3::A(c) => { this.background = c },
+            Any3::B(c) => { this.background = DynColor::Custom(c) },
+            Any3::C(c) => { this.background = DynColor::Named(c) },
+        }));
+        fields.add_field_method_get("original_background", |_, this| Ok(this.background_original.clone()));
     }
 
-    fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(_methods: &mut M) {
+    fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_method("apply", |ctx, this, handle: LuaHandle| {
+            let handle = handle.handle.clone().typed_weak();
+            let world = ctx.globals().get::<_, LuaWorld>("world").unwrap();
+            let mut w = world.write();
+            let mut palettes = w.resource_mut::<Assets<Palette>>();
+            if let Some(cur) = palettes.get_mut(&handle) {
+                *cur = this.clone();
+                // todo also push update to all mats
+            } else {
+                return Err(LuaError::RuntimeError(format!("No Palette was found associated with handle {:?}", handle)));
+            }
+            Ok(())
+        });
     }
 }
 impl LuaMod for Palette {
@@ -356,6 +394,22 @@ impl LoadedPalettes {
 #[derive(Clone, Debug, Default, Resource)]
 pub struct ColorCache(pub HashMap<Handle<Palette>, HashMap<DynColor, RgbaColor>>);
 impl ColorCache {
+    pub fn simple_rgba(
+        &mut self,
+        color:            &DynColor,
+        loaded_palettes:  &LoadedPalettes,
+        palettes:         &Assets<Palette>,
+        shared_instances: &SharedInstances
+    ) -> RgbaColor {
+        if let Some(palette) = palettes.get(&loaded_palettes.current_handle) {
+            if let Some(i) = loaded_palettes.lua_instance(shared_instances) {
+                self.rgba(color, palette, i)
+            } else {
+                RgbaColor::FUCHSIA
+            }
+        } else { RgbaColor::FUCHSIA }
+    }
+
     pub fn rgba<L>(&mut self, dyn_color: &DynColor, palette: &Palette, lua_readable: &L) -> RgbaColor where L: LuaReadable {
         let dyn_color = if let DynColor::Background = dyn_color { &palette.background } else { dyn_color };
         if let Some(rgba) = {
@@ -375,31 +429,28 @@ impl ColorCache {
                 DynColor::Custom(rgba) => {
                     let rgba = *rgba;
                     let rgba = match &palette.on_miss {
-                        ColorMiss::Clamp => {
-                            // todo color match technology
-                            palette.missing_color
-                        },
+                        ColorMiss::Clamp => palette.clamp(rgba),
+                        ColorMiss::Const(rgba) => *rgba,
                         ColorMiss::Identity => rgba,
                         ColorMiss::Fn { function, params,.. } => { // uh oh, danger!
                             let mut new_params = Vec::new();
-                            new_params.push(ScriptVar::Color(rgba));
-                            if !params.0.is_empty() {
-                                let mut params = params.0.clone();
-                                new_params.append(&mut params);
+                            new_params.push(TransVar::Var(ScriptVar::Rgba(rgba)));
+                            for param in params.iter() {
+                                new_params.push(TransVar::Var(param.clone()));
                             }
                             lua_readable.with_read(|lua| {
                                 let globals = lua.globals();
                                 if let Some(f) = globals.get::<_, Option<LuaFunction>>(function.as_str()).unwrap() {
-                                    match f.call::<_, RgbaColor>(ManyScriptVars(new_params)) {
+                                    match f.call::<_, RgbaColor>(ManyTransVars(new_params)) {
                                         Ok(c)    => c,
                                         Err(err) => {
                                             warn!("Function for on_miss Fn {} errored: {}", function, err);
-                                            RgbaColor::FUSCHIA
+                                            RgbaColor::FUCHSIA
                                         }
                                     }
                                 } else {
                                     warn!("Function not found for on_miss Fn {}", function);
-                                    RgbaColor::FUSCHIA
+                                    RgbaColor::FUCHSIA
                                 }
                             })
                         },

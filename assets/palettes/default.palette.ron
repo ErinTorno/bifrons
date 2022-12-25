@@ -1,5 +1,5 @@
 (
-    background: "black", // if you set this to "background" it'll probably blow up, so don't
+    background: "black",
     colors: {
         // Inspired and expanded from TY Murder Mystery 16 Palette https://lospec.com/palette-list/ty-murder-mystery-16
         "black":      "#1c1a23",
@@ -7,8 +7,8 @@
         "brown":      "#615344",
         "clay":       "#8d3e29",
         "coffee":     "#503528",
-        "cream":      "#deceb4",
         "cornflower": "#8490d5",
+        "cream":      "#deceb4",
         "cyan":       "icy",
         "ferra":      "#7a6260",
         "fuchsia":    "#8f57a3",

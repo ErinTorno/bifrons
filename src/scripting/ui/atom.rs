@@ -1,0 +1,171 @@
+use std::fmt::Display;
+
+use bevy::prelude::{Resource, warn};
+use mlua::prelude::*;
+
+use crate::{data::lua::{LuaWorld, TransVar, ScriptVar}, scripting::LuaMod};
+
+#[derive(Debug, Resource, Default)]
+pub struct LuaAtomRegistry {
+    pub atoms: Vec<LuaAtom>,
+}
+impl LuaAtomRegistry {
+    /// Views the current atom state, acknowledging changes as viewed if it isn't already
+    pub fn acknowledge(&mut self, atom_ref: LuaAtomRef) -> TransVar {
+        let atom = &mut self.atoms[atom_ref.index];
+        atom.acknowledged = true;
+        atom.last_eval.clone()
+    }
+
+    /// Gets either the value, or if it's an atom, looks up that value and acknowledges its changes
+    pub fn acknowledge_or_else<T, E, F>(&mut self, or_atom: OrAtom<T>, f: F) -> T where T: Clone + TryFrom<TransVar, Error=E>, F: FnOnce() -> T, E: Display {
+        match or_atom {
+            OrAtom::Atom(a) => {
+                let atom = &mut self.atoms[a.index];
+                let already_acked = atom.acknowledged;
+                atom.acknowledged = true;
+                match T::try_from(atom.last_eval.clone()) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        if !already_acked {
+                            warn!("atom#{} TransVar failed conversion upon acknowledgement {}", a.index, e);
+                        }
+                        f()
+                    },
+                }
+            },
+            OrAtom::Val(v) => v,
+        }
+    }
+
+    /// Gets either the value, or if it's an atom, looks up that value and acknowledges its changes
+    pub fn acknowledge_option<T, E>(&mut self, or_atom: OrAtom<Option<T>>) -> Option<T> where T: Clone + TryFrom<TransVar, Error=E>, E: Display {
+        match or_atom {
+            OrAtom::Atom(a) => {
+                let atom = &mut self.atoms[a.index];
+                let already_acked = atom.acknowledged;
+                atom.acknowledged = true;
+                if let TransVar::Var(ScriptVar::Nil) = atom.last_eval {
+                    None
+                } else {
+                    T::try_from(atom.last_eval.clone()).map_err(|e| {
+                        if !already_acked {
+                            warn!("atom#{} TransVar failed conversion upon acknowledgement {}", a.index, e);
+                        }
+                    }).ok()
+                }
+            },
+            OrAtom::Val(v) => v,
+        }
+    }
+
+    /// Views the current atom state without acknowledging it
+    pub fn peek(&mut self, atom_ref: LuaAtomRef) -> TransVar {
+        self.atoms[atom_ref.index].last_eval.clone()
+    }
+}
+
+#[derive(Debug)]
+pub struct LuaAtom {
+    /// key to actual lua value in the registry
+    key:          LuaRegistryKey,
+    /// value it was at last evaluation as a TransVar
+    last_eval:    TransVar,
+    /// bool marking if the last change to this has been acknowledged (and not just read)
+    acknowledged: bool,
+}
+impl LuaMod for LuaAtom {
+    fn mod_name() -> &'static str { "Atom" }
+
+    fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
+        table.set("create", lua.create_function(|lua, val: LuaValue| {
+            let key          = lua.create_registry_value(val.clone())?;
+            let last_eval    = TransVar::from_lua(val, lua)?;
+            let acknowledged = false;
+
+            let world   = lua.globals().get::<_, LuaWorld>("world").unwrap();
+            let mut w   = world.write();
+            let mut reg = w.resource_mut::<LuaAtomRegistry>();
+            let index   = reg.atoms.len();
+            reg.atoms.push(LuaAtom { key, last_eval, acknowledged });
+            Ok(LuaAtomRef { index })
+        })?)?;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LuaAtomRef {
+    index: usize,
+}
+impl LuaAtomRef {
+    pub fn index(&self) -> usize { self.index }
+
+    pub fn get<'a>(&self, lua: &'a Lua) -> Result<LuaValue<'a>, mlua::Error> {
+        let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
+        let w     = world.read();
+        let reg   = w.resource::<LuaAtomRegistry>();
+        lua.registry_value(&reg.atoms[self.index].key)
+    }
+
+    pub fn set(&self, lua: &Lua, val: LuaValue) -> Result<(), mlua::Error> {
+        let world   = lua.globals().get::<_, LuaWorld>("world").unwrap();
+        let mut w   = world.write();
+        let mut reg = w.resource_mut::<LuaAtomRegistry>();
+        reg.atoms[self.index].last_eval = TransVar::from_lua(val, lua)?;
+        Ok(())
+    }
+
+    pub fn update(&self, lua: &Lua, f: LuaFunction) -> Result<(), mlua::Error> {
+        let world   = lua.globals().get::<_, LuaWorld>("world").unwrap();
+        let mut w   = world.write();
+        let mut reg = w.resource_mut::<LuaAtomRegistry>();
+
+        let key = &reg.atoms[self.index].key;
+        let val: LuaValue = lua.registry_value(key)?;
+        let val: LuaValue = f.call(val)?;
+        lua.replace_registry_value(key, val.clone())?;
+        reg.atoms[self.index].last_eval = TransVar::from_lua(val, lua)?;
+        Ok(())
+    }
+}
+impl LuaUserData for LuaAtomRef {
+    fn add_fields<'lua, F: LuaUserDataFields<'lua, Self>>(_fields: &mut F) {
+        
+    }
+
+    fn add_methods<'lua, M: LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_meta_method(LuaMetaMethod::Call, |lua, this, ()| this.get(lua));
+        methods.add_meta_method(LuaMetaMethod::Eq, |_, this, that: LuaAtomRef| Ok(this.index == that.index));
+        methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(format!("AtomRef#{}", this.index)));
+
+        methods.add_method("get", |lua, this, ()|  this.get(lua));
+        methods.add_method("map", |lua, this, f|   this.update(lua, f));
+        methods.add_method("set", |lua, this, val| this.set(lua, val));
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OrAtom<T> {
+    Atom(LuaAtomRef),
+    Val(T),
+}
+impl<T> OrAtom<T> {
+    pub fn map<F, R>(self, f: F) -> OrAtom<R> where F: FnOnce(T) -> R {
+        match self {
+            OrAtom::Atom(r) => OrAtom::Atom(r),
+            OrAtom::Val(t)  => OrAtom::Val(f(t)),
+        }
+    }
+}
+impl<'lua, T> FromLua<'lua> for OrAtom<T> where T: FromLua<'lua> {
+    fn from_lua(v: LuaValue<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        if let Some(a) = T::from_lua(v.clone(), lua).ok() {
+            Ok(OrAtom::Val(a))
+        } else if let Some(b) = LuaAtomRef::from_lua(v.clone(), lua).ok() {
+            Ok(OrAtom::Atom(b))
+        } else {
+            Err(LuaError::RuntimeError(format!("Failed OrAtom conversion")))
+        }
+    }
+}

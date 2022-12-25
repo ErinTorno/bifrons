@@ -1,14 +1,14 @@
 use mlua::prelude::*;
 use std::{default::default};
 
-use crate::{data::lua::{LuaWorld, Recipient, ManyScriptVars, ScriptVar, Hook}, system::lua::{SharedInstances, LuaQueue, HookCall}};
+use crate::{data::lua::{LuaWorld, Recipient, ManyTransVars, ScriptVar, Hook, TransVar}, system::lua::{SharedInstances, LuaQueue, HookCall}};
 
 use super::{ LuaMod, bevy_api::LuaEntity};
 
 #[derive(Clone, Debug)]
 pub struct MessageBuilder {
     pub hook_name: String,
-    pub args:      ManyScriptVars,
+    pub args:      ManyTransVars,
     pub recipient: Recipient,
     pub read_lock: bool,
 }
@@ -20,7 +20,7 @@ impl LuaUserData for MessageBuilder {
     fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_meta_method(LuaMetaMethod::Len, |_, this, ()| Ok(this.args.0.len()));
         methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(format!("{:?}", this)));
-        methods.add_function("add_arg", |_, (this, var): (LuaAnyUserData, ScriptVar)| {
+        methods.add_function("add_arg", |_, (this, var): (LuaAnyUserData, TransVar)| {
             let mut this: MessageBuilder = this.take()?;
             this.args.0.push(var);
             Ok(this)

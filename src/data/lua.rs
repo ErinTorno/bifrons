@@ -8,7 +8,7 @@ use parking_lot::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::scripting::{time::LuaTime, bevy_api::{LuaEntity, math::{LuaVec2, LuaVec3}}, color::RgbaColor, lua_to_string, LuaMod};
+use crate::scripting::{time::LuaTime, bevy_api::{LuaEntity, math::{LuaVec2, LuaVec3}, handle::LuaHandle}, color::RgbaColor, lua_to_string, LuaMod};
 
 use super::palette::{DynColor};
 
@@ -116,21 +116,12 @@ impl AssetLoader for LuaScriptLoader {
     }
 }
 
-#[derive(Clone, Debug, Inspectable)]
+#[derive(Clone, Debug)]
 pub struct Hook {
     pub name: String,
-    pub args: ManyScriptVars,
+    pub args: ManyTransVars,
 }
 impl Hook {
-    // I have no idea why this doesn't compile but `exec` does
-    // pub fn call<'lua, T>(&self, lua: &'lua RwLock<Lua>, entity: LuaEntity) -> Result<Option<T>, LuaError> where T: Clone + FromLua<'lua> {
-    //     let lua = lua.write();
-    //     lua.globals().set("entity", entity)?;
-    //     if let Some(f) = lua.globals().get::<_, Option<LuaFunction>>(self.name.clone())? {
-    //         Ok(Some(f.call(self.args.clone())?))
-    //     } else { Ok(None) }
-    // }
-
     pub fn exec<'lua>(&self, lua: &'lua RwLock<Lua>, entity: LuaEntity) -> Result<(), LuaError> {
         let lua = lua.write();
         lua.globals().set("entity", entity)?;
@@ -204,16 +195,14 @@ pub enum ScriptVar {
     AnyUserTable(Vec<(ScriptVar, ScriptVar)>),
     Array(Vec<ScriptVar>),
     Bool(bool),
-    Color(RgbaColor),
-    DynColor(DynColor),
-    Entity(u64),
+    Color(DynColor),
     Int(i64),
     #[default]
     Nil,
     Num(f64),
+    Rgba(RgbaColor),
     Str(String),
     Table(HashMap<String, ScriptVar>),
-    Time(LuaTime),
     Vec2(Vec2),
     Vec3(Vec3),
 }
@@ -230,14 +219,12 @@ impl<'lua> ToLua<'lua> for ScriptVar {
             ScriptVar::Array(v)    => Ok(v.to_lua(lua)?),
             ScriptVar::Bool(b)     => Ok(LuaValue::Boolean(b)),
             ScriptVar::Color(c)    => Ok(c.to_lua(lua)?),
-            ScriptVar::DynColor(c) => Ok(c.to_lua(lua)?),
-            ScriptVar::Entity(u)   => Ok(LuaEntity::new(Entity::from_bits(u)).to_lua(lua)?),
             ScriptVar::Int(i)      => Ok(LuaValue::Integer(i)),
             ScriptVar::Nil         => Ok(LuaValue::Nil),
             ScriptVar::Num(i)      => Ok(LuaValue::Number(i)),
+            ScriptVar::Rgba(c)     => Ok(c.to_lua(lua)?),
             ScriptVar::Str(s)      => Ok(s.to_lua(lua)?),
             ScriptVar::Table(t)    => Ok(t.to_lua(lua)?),
-            ScriptVar::Time(t)     => Ok(t.to_lua(lua)?),
             ScriptVar::Vec2(v)     => Ok(LuaVec2::new(v).to_lua(lua)?),
             ScriptVar::Vec3(v)     => Ok(LuaVec3::new(v).to_lua(lua)?),
         }
@@ -259,16 +246,14 @@ impl<'lua> FromLua<'lua> for ScriptVar {
                 Ok(ScriptVar::AnyUserTable(pairs))
             },
             LuaValue::UserData(data) => {
-                if data.is::<LuaEntity>() {
-                    Ok(ScriptVar::Entity(data.borrow::<LuaEntity>()?.clone().0.to_bits()))
-                } else if data.is::<LuaVec2>() {
+                if data.is::<LuaVec2>() {
                     Ok(ScriptVar::Vec2(data.borrow::<LuaVec2>()?.clone().0))
                 } else if data.is::<LuaVec3>() {
                     Ok(ScriptVar::Vec3(data.borrow::<LuaVec3>()?.clone().0))
                 } else if data.is::<RgbaColor>() {
-                    Ok(ScriptVar::Color(data.borrow::<RgbaColor>()?.clone().into()))
+                    Ok(ScriptVar::Rgba(data.borrow::<RgbaColor>()?.clone().into()))
                 } else if data.is::<DynColor>() {
-                    Ok(ScriptVar::DynColor(data.borrow::<DynColor>()?.clone().into()))
+                    Ok(ScriptVar::Color(data.borrow::<DynColor>()?.clone().into()))
                 } else {
                     let meta = data.get_metatable()?;
                     if let Some(function) = meta.get::<_, Option<LuaFunction>>(LuaMetaMethod::Custom("__script_var".into()))? {
@@ -307,8 +292,6 @@ impl From<u32> for ScriptVar     { fn from(value: u32)     -> Self { ScriptVar::
 impl From<u64> for ScriptVar     { fn from(value: u64)     -> Self { ScriptVar::Int(value as i64) } }
 impl From<f32> for ScriptVar     { fn from(value: f32)     -> Self { ScriptVar::Num(value as f64) } }
 impl From<f64> for ScriptVar     { fn from(value: f64)     -> Self { ScriptVar::Num(value as f64) } }
-impl From<Entity> for ScriptVar  { fn from(value: Entity)  -> Self { ScriptVar::Entity(value.to_bits()) } }
-impl From<LuaTime> for ScriptVar { fn from(value: LuaTime) -> Self { ScriptVar::Time(value) } }
 impl From<String> for ScriptVar  { fn from(value: String)  -> Self { ScriptVar::Str(value) } }
 impl From<Vec2> for ScriptVar    { fn from(value: Vec2)    -> Self { ScriptVar::Vec2(value) } }
 impl From<Vec3> for ScriptVar    { fn from(value: Vec3)    -> Self { ScriptVar::Vec3(value) } }
@@ -333,9 +316,9 @@ impl<V> From<Vec<V>> for ScriptVar where V: Clone + Into<ScriptVar> {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Inspectable, PartialEq, Serialize)]
-pub struct ManyScriptVars(pub Vec<ScriptVar>);
-impl<'lua> ToLuaMulti<'lua> for ManyScriptVars {
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ManyTransVars(pub Vec<TransVar>);
+impl<'lua> ToLuaMulti<'lua> for ManyTransVars {
     fn to_lua_multi(self, lua: &'lua Lua) -> Result<LuaMultiValue<'lua>, LuaError> {
         let mut mv = LuaMultiValue::new();
         for val in self.0.iter().rev() {
@@ -344,29 +327,29 @@ impl<'lua> ToLuaMulti<'lua> for ManyScriptVars {
         Ok(mv)
     }
 }
-impl<A> Into<ManyScriptVars> for (A,) where A: Into<ScriptVar> {
-    fn into(self) -> ManyScriptVars {
-        ManyScriptVars(vec![self.0.into()])
+impl<A> Into<ManyTransVars> for (A,) where A: Into<TransVar> {
+    fn into(self) -> ManyTransVars {
+        ManyTransVars(vec![self.0.into()])
     }
 }
-impl<A, B> Into<ManyScriptVars> for (A, B) where A: Into<ScriptVar>, B: Into<ScriptVar> {
-    fn into(self) -> ManyScriptVars {
-        ManyScriptVars(vec![self.0.into(), self.1.into()])
+impl<A, B> Into<ManyTransVars> for (A, B) where A: Into<TransVar>, B: Into<TransVar> {
+    fn into(self) -> ManyTransVars {
+        ManyTransVars(vec![self.0.into(), self.1.into()])
     }
 }
-impl<A, B, C> Into<ManyScriptVars> for (A, B, C) where A: Into<ScriptVar>, B: Into<ScriptVar>, C: Into<ScriptVar> {
-    fn into(self) -> ManyScriptVars {
-        ManyScriptVars(vec![self.0.into(), self.1.into(), self.2.into()])
+impl<A, B, C> Into<ManyTransVars> for (A, B, C) where A: Into<TransVar>, B: Into<TransVar>, C: Into<TransVar> {
+    fn into(self) -> ManyTransVars {
+        ManyTransVars(vec![self.0.into(), self.1.into(), self.2.into()])
     }
 }
-impl<A, B, C, D> Into<ManyScriptVars> for (A, B, C, D) where A: Into<ScriptVar>, B: Into<ScriptVar>, C: Into<ScriptVar>, D: Into<ScriptVar> {
-    fn into(self) -> ManyScriptVars {
-        ManyScriptVars(vec![self.0.into(), self.1.into(), self.2.into(), self.3.into()])
+impl<A, B, C, D> Into<ManyTransVars> for (A, B, C, D) where A: Into<TransVar>, B: Into<TransVar>, C: Into<TransVar>, D: Into<TransVar> {
+    fn into(self) -> ManyTransVars {
+        ManyTransVars(vec![self.0.into(), self.1.into(), self.2.into(), self.3.into()])
     }
 }
-impl<A, B, C, D, E> Into<ManyScriptVars> for (A, B, C, D, E) where A: Into<ScriptVar>, B: Into<ScriptVar>, C: Into<ScriptVar>, D: Into<ScriptVar>, E: Into<ScriptVar> {
-    fn into(self) -> ManyScriptVars {
-        ManyScriptVars(vec![self.0.into(), self.1.into(), self.2.into(), self.3.into(), self.4.into()])
+impl<A, B, C, D, E> Into<ManyTransVars> for (A, B, C, D, E) where A: Into<TransVar>, B: Into<TransVar>, C: Into<TransVar>, D: Into<TransVar>, E: Into<TransVar> {
+    fn into(self) -> ManyTransVars {
+        ManyTransVars(vec![self.0.into(), self.1.into(), self.2.into(), self.3.into(), self.4.into()])
     }
 }
 
@@ -376,5 +359,230 @@ pub struct LuaScriptVars(pub std::collections::HashMap<String, ScriptVar>);
 impl LuaScriptVars {
     pub fn merge(&mut self, other: &Self) {
         self.0.extend(other.0.iter().map(|p| (p.0.clone(), p.1.clone())));
+    }
+}
+
+// Transfer
+
+// For type we'll also want to transfer, but aren't serializable
+// Or are types that aren't consistent between runs (like Entities and Handles)
+#[derive(Clone, Debug, PartialEq)]
+pub enum TransVar {
+    AnyUserTable(Vec<(TransVar, TransVar)>),
+    Entity(u64),
+    Handle(LuaHandle),
+    Time(LuaTime),
+    Var(ScriptVar),
+}
+impl Default for TransVar {
+    fn default() -> Self {
+        TransVar::Var(ScriptVar::Nil)
+    }
+}
+impl TransVar {
+    pub fn try_handle_image(&self) -> Option<Handle<Image>> {
+        match self {
+            TransVar::Handle(handle) => handle.get_image(),
+            _ => None,
+        }
+    }
+}
+impl<'lua> FromLua<'lua> for TransVar {
+    fn from_lua(lua_value: LuaValue<'lua>, _lua: &'lua Lua) -> Result<Self, LuaError> {
+        match lua_value {
+            LuaValue::Table(t) => {
+                let mut pairs = Vec::new();
+                for p in t.pairs().into_iter() {
+                    pairs.push(p?);
+                }
+                Ok(TransVar::AnyUserTable(pairs))
+            },
+            LuaValue::UserData(data) => {
+                if data.is::<LuaEntity>() {
+                    Ok(TransVar::Entity(data.borrow::<LuaEntity>()?.clone().0.to_bits()))
+                } else if data.is::<LuaHandle>() {
+                    Ok(TransVar::Handle(data.borrow::<LuaHandle>()?.clone()))
+                } else if data.is::<LuaTime>() {
+                    Ok(TransVar::Time(data.borrow::<LuaTime>()?.clone()))
+                } else {
+                    Ok(TransVar::Var(ScriptVar::from_lua(LuaValue::UserData(data), _lua)?))
+                }
+            },
+            v => Ok(TransVar::Var(ScriptVar::from_lua(v, _lua)?)),
+        }
+    }
+}
+impl<'lua> ToLua<'lua> for TransVar {
+    fn to_lua(self, lua: &'lua Lua) -> Result<LuaValue<'lua>, LuaError> {
+        match self {
+            TransVar::AnyUserTable(pairs) => {
+                let table = lua.create_table()?;
+                for (k, v) in pairs {
+                    table.set(k.to_lua(lua)?, v.to_lua(lua)?)?;
+                }
+                Ok(LuaValue::Table(table))
+            },
+            TransVar::Entity(u) => Ok(LuaEntity::new(Entity::from_bits(u)).to_lua(lua)?),
+            TransVar::Handle(h) => Ok(h.to_lua(lua)?),
+            TransVar::Time(t)   => Ok(t.to_lua(lua)?),
+            TransVar::Var(v)    => Ok(v.to_lua(lua)?),
+        }
+    }
+}
+impl From<()> for TransVar      { fn from(_: ())          -> Self { TransVar::Var(ScriptVar::Nil) } }
+impl From<bool> for TransVar    { fn from(value: bool)    -> Self { TransVar::Var(ScriptVar::Bool(value)) } }
+impl From<i8> for TransVar      { fn from(value: i8)      -> Self { TransVar::Var(ScriptVar::Int(value as i64)) } }
+impl From<i16> for TransVar     { fn from(value: i16)     -> Self { TransVar::Var(ScriptVar::Int(value as i64)) } }
+impl From<i32> for TransVar     { fn from(value: i32)     -> Self { TransVar::Var(ScriptVar::Int(value as i64)) } }
+impl From<i64> for TransVar     { fn from(value: i64)     -> Self { TransVar::Var(ScriptVar::Int(value as i64)) } }
+impl From<u8> for TransVar      { fn from(value: u8)      -> Self { TransVar::Var(ScriptVar::Int(value as i64)) } }
+impl From<u16> for TransVar     { fn from(value: u16)     -> Self { TransVar::Var(ScriptVar::Int(value as i64)) } }
+impl From<u32> for TransVar     { fn from(value: u32)     -> Self { TransVar::Var(ScriptVar::Int(value as i64)) } }
+impl From<u64> for TransVar     { fn from(value: u64)     -> Self { TransVar::Var(ScriptVar::Int(value as i64)) } }
+impl From<f32> for TransVar     { fn from(value: f32)     -> Self { TransVar::Var(ScriptVar::Num(value as f64)) } }
+impl From<f64> for TransVar     { fn from(value: f64)     -> Self { TransVar::Var(ScriptVar::Num(value as f64)) } }
+impl From<Entity> for TransVar  { fn from(value: Entity)  -> Self { TransVar::Entity(value.to_bits()) } }
+impl From<LuaTime> for TransVar { fn from(value: LuaTime) -> Self { TransVar::Time(value) } }
+impl From<String> for TransVar  { fn from(value: String)  -> Self { TransVar::Var(ScriptVar::Str(value)) } }
+impl From<Vec2> for TransVar    { fn from(value: Vec2)    -> Self { TransVar::Var(ScriptVar::Vec2(value)) } }
+impl From<Vec3> for TransVar    { fn from(value: Vec3)    -> Self { TransVar::Var(ScriptVar::Vec3(value)) } }
+impl<V> From<Option<V>> for TransVar where V: Clone + Into<TransVar> {
+    fn from(value: Option<V>) -> Self {
+        match value {
+            Some(v) => v.into(),
+            None    => TransVar::default(),
+        }
+    }
+}
+impl<K, V> From<HashMap<K, V>> for TransVar where K: Into<TransVar>, V: Into<TransVar> {
+    fn from(value: HashMap<K, V>) -> Self {
+        let mut vec = Vec::new();
+        for (k, v) in value {
+            vec.push((k.into(), v.into()));
+        }
+        TransVar::AnyUserTable(vec)
+    }
+}
+
+// *********************** //
+// TryFrom out of TransVar //
+// *********************** //
+
+// Primitives
+impl TryFrom<TransVar> for bool {
+    type Error = String;
+    fn try_from(value: TransVar) -> Result<Self, Self::Error> {
+        match value {
+            TransVar::Var(ScriptVar::Bool(b)) => Ok(b),
+            TransVar::Var(ScriptVar::Nil)     => Ok(false),
+            _ => Ok(true),
+        }
+    }
+}
+impl TryFrom<TransVar> for i64 {
+    type Error = String;
+    fn try_from(value: TransVar) -> Result<Self, Self::Error> {
+        match value {
+            TransVar::Var(ScriptVar::Int(i)) => Ok(i),
+            TransVar::Var(ScriptVar::Num(n))     => Ok(n as i64),
+            _ => Err(format!("Not a Number {:?}", value)),
+        }
+    }
+}
+impl TryFrom<TransVar> for i8 {
+    type Error = String;
+    fn try_from(value: TransVar) -> Result<Self, Self::Error> { Ok(i64::try_from(value)? as i8) }
+}
+impl TryFrom<TransVar> for i16 {
+    type Error = String;
+    fn try_from(value: TransVar) -> Result<Self, Self::Error> { Ok(i64::try_from(value)? as i16) }
+}
+impl TryFrom<TransVar> for i32 {
+    type Error = String;
+    fn try_from(value: TransVar) -> Result<Self, Self::Error> { Ok(i64::try_from(value)? as i32) }
+}
+impl TryFrom<TransVar> for u8 {
+    type Error = String;
+    fn try_from(value: TransVar) -> Result<Self, Self::Error> { Ok(i64::try_from(value)? as u8) }
+}
+impl TryFrom<TransVar> for u16 {
+    type Error = String;
+    fn try_from(value: TransVar) -> Result<Self, Self::Error> { Ok(i64::try_from(value)? as u16) }
+}
+impl TryFrom<TransVar> for u32 {
+    type Error = String;
+    fn try_from(value: TransVar) -> Result<Self, Self::Error> { Ok(i64::try_from(value)? as u32) }
+}
+impl TryFrom<TransVar> for u64 {
+    type Error = String;
+    fn try_from(value: TransVar) -> Result<Self, Self::Error> { Ok(i64::try_from(value)? as u64) }
+}
+impl TryFrom<TransVar> for usize {
+    type Error = String;
+    fn try_from(value: TransVar) -> Result<Self, Self::Error> { Ok(i64::try_from(value)? as usize) }
+}
+impl TryFrom<TransVar> for f64 {
+    type Error = String;
+    fn try_from(value: TransVar) -> Result<Self, Self::Error> {
+        match value {
+            TransVar::Var(ScriptVar::Int(i)) => Ok(i as f64),
+            TransVar::Var(ScriptVar::Num(n)) => Ok(n),
+            _ => Err(format!("Not a Number {:?}", value)),
+        }
+    }
+}
+impl TryFrom<TransVar> for f32 {
+    type Error = String;
+    fn try_from(value: TransVar) -> Result<Self, Self::Error> { Ok(f64::try_from(value)? as f32) }
+}
+impl TryFrom<TransVar> for Vec2 {
+    type Error = String;
+    fn try_from(value: TransVar) -> Result<Self, Self::Error> {
+        match value {
+            TransVar::Var(ScriptVar::Vec2(n)) => Ok(n),
+            _ => Err(format!("Not a Vec2 {:?}", value)),
+        }
+    }
+}
+impl TryFrom<TransVar> for Vec3 {
+    type Error = String;
+    fn try_from(value: TransVar) -> Result<Self, Self::Error> {
+        match value {
+            TransVar::Var(ScriptVar::Vec3(n)) => Ok(n),
+            _ => Err(format!("Not a Vec3 {:?}", value)),
+        }
+    }
+}
+
+impl TryFrom<TransVar> for Entity {
+    type Error = String;
+    fn try_from(value: TransVar) -> Result<Self, Self::Error> {
+        match value {
+            TransVar::Entity(b) => Ok(Entity::from_bits(b)),
+            _ => Err(format!("Not an Entity {:?}", value)),
+        }
+    }
+}
+
+// Colors
+impl TryFrom<TransVar> for DynColor {
+    type Error = String;
+    fn try_from(value: TransVar) -> Result<Self, Self::Error> {
+        match value {
+            TransVar::Var(ScriptVar::Color(c)) => Ok(c.clone()),
+            TransVar::Var(ScriptVar::Rgba(rgba)) => Ok(DynColor::Custom(rgba)),
+            _ => Err(format!("Not a Color {:?}", value)),
+        }
+    }
+}
+
+// Handles
+impl TryFrom<TransVar> for Handle<Image> {
+    type Error = String;
+    fn try_from(value: TransVar) -> Result<Self, Self::Error> {
+        match value {
+            TransVar::Handle(h) => h.get_image().ok_or_else(|| format!("Handle not of type Image: {:?}", h)),
+            _ => Err(format!("Not a Handle<Image> {:?}", value)),
+        }
     }
 }

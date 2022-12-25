@@ -1,6 +1,9 @@
 (
     name:    "Testing House",
-    scripts: ["levels/testing/testing_house.lua"],
+    scripts: [
+        "ui/editor.lua",
+        "levels/testing/testing_house.lua",
+    ],
     lines: {
         "english": {
             "name":  "Testing House",

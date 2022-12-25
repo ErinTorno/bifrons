@@ -4,6 +4,7 @@ use mlua::prelude::*;
 use crate::data::lua::LuaWorld;
 
 pub mod handle;
+pub mod image;
 pub mod math;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

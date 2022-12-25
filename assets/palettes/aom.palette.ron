@@ -1,0 +1,11 @@
+(
+    background: "#000000",
+    on_miss:    Const("#ffffff"),
+    colors: {
+        "fuchsia":    "red",
+        "lavender":   "red",
+        "purple":     "red",
+        "red":        "#c70f17",
+        "rose":       "red",
+    },
+)

@@ -3,7 +3,7 @@ use std::{collections::{HashMap, HashSet}};
 use bevy::{prelude::*};
 use iyes_loopless::prelude::IntoConditionalSystem;
 
-use crate::{data::{level::*, material::{TextureMaterial, AtlasIndex, TexMatInfo, MaterialColors, MaterialsToInit, LoadedMat}, geometry::{Shape, LightAnimState, LightAnim}, prefab::{PrefabLoader, Prefab}, lua::{LuaScript, ScriptVar, Hook}}, scripting::{random, event::ON_ROOM_REVEAL}, util::InsertableWithPredicate};
+use crate::{data::{level::*, material::{TextureMaterial, AtlasIndex, TexMatInfo, MaterialColors, MaterialsToInit, LoadedMat}, geometry::{Shape, LightAnimState, LightAnim}, prefab::{PrefabLoader, Prefab}, lua::{LuaScript, ScriptVar, Hook, TransVar}}, scripting::{random, event::ON_ROOM_REVEAL}, util::InsertableWithPredicate};
 
 use super::{texture::{MissingTexture, Background}, common::{fix_missing_extension, ToInitHandle}, lua::{ToInitScripts, SharedInstances, LuaQueue, HookCall}};
 
@@ -271,7 +271,7 @@ pub fn spawn_room(
             });
 
         if is_revealed {
-            let mut args = HashMap::<String, ScriptVar>::new();
+            let mut args = HashMap::<String, TransVar>::new();
             args.insert("name".into(), room_name.clone().into());
             args.insert("entity".into(), room_entity.clone().into());
             commands.entity(room_entity).insert(LuaQueue {

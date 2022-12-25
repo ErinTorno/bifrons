@@ -24,8 +24,8 @@ function on_init()
     -- Palette.load("palettes/black_and_white"):on_load(function(handle)
     --     Palette.change(handle)
     -- end)
-    Palette.load("palettes/black_and_white"):on_load(Palette.change)
-    -- Palette.load("palettes/default"):on_load(Palette.change)
+    -- Palette.load("palettes/black_and_white"):on_load(Palette.change)
+    -- Palette.load("palettes/woodblock"):on_load(Palette.change)
 
     Level.spawn_piece("pieces/kitchen", {
         parent = entity,
@@ -33,6 +33,13 @@ function on_init()
         reveal = true,
         pos    = Vec3.new(0, 0, -10),
     })
+    -- Palette.load("palettes/aom"):on_load(Palette.change)
+    -- Palette.load("palettes/default"):on_load(function(handle)
+    --     local palette = handle:get()
+    --     palette.background = "red"
+    --     -- palette.background = Color "red" -- this explicitly casts to a DynColor
+    --     palette:apply(handle)
+    -- end)
 end
 
 function on_update(time)

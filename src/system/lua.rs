@@ -10,11 +10,12 @@ use mlua::prelude::*;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 
-use crate::data::lua::{LuaScript, LuaScriptLoader, InstanceKind, InstanceRef, Hook, LuaWorld, Recipient, ScriptVar, LuaScriptVars, ManyScriptVars};
+use crate::data::lua::{LuaScript, LuaScriptLoader, InstanceKind, InstanceRef, Hook, LuaWorld, Recipient, ScriptVar, LuaScriptVars, ManyTransVars};
 use crate::scripting::event::{constants, ON_UPDATE, ON_INIT};
 use crate::scripting::register_lua_mods;
 use crate::scripting::registry::{Registry, AssetEventKey};
 use crate::scripting::time::LuaTime;
+use crate::scripting::ui::atom::LuaAtomRegistry;
 use crate::util::collections::Singleton;
 
 #[derive(Clone, Debug, Default)]
@@ -31,6 +32,7 @@ impl Plugin for LuaPlugin {
         on_queue_collect.add_system(update_script_queue);
         
         app
+            .init_resource::<LuaAtomRegistry>()
             .init_resource::<LuaTime>()
             .init_resource::<Registry>()
             .init_resource::<SharedInstances>()
@@ -49,18 +51,14 @@ impl Plugin for LuaPlugin {
             )
             .register_type::<InstanceKind>()
             .register_type::<LuaScript>()
-            .register_inspectable::<Hook>()
-            .register_inspectable::<HookCall>()
             .register_inspectable::<LuaScriptVars>()
-            .register_inspectable::<ManyScriptVars>()
             .register_inspectable::<ScriptVar>()
         ;
     }
 }
 
-#[derive(Clone, Debug, Inspectable)]
+#[derive(Clone, Debug)]
 pub struct HookCall {
-    #[inspectable(ignore)]
     pub script_ids: HashSet<u32>,
     pub hook:       Hook,
 }
@@ -168,9 +166,9 @@ pub fn send_on_update(
 pub fn load_script(script: &LuaScript, world: LuaWorld, id: u32) -> Result<InstanceRef, LuaError> {
     let lua = Lua::new();
     lua.globals().set("world", world)?;
-    lua.load(&script.source).exec()?;
     register_lua_mods(&lua)?;
     lua.globals().set("script_id", id)?;
+    lua.load(&script.source).exec()?;
     Ok(RwLock::new(lua).into())
 }
 

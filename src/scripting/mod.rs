@@ -1,9 +1,9 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, asset::FileAssetIo};
 use mlua::prelude::*;
 
-use crate::{data::{stat::{Stat, Pool}, material::{TextureMaterial,}, input::ActionState, formlist::{FormList, InjectCommands}, geometry::{Light, LightAnim, LightKind}, lua::{ScriptVar}, palette::Palette}};
+use crate::{data::{stat::{Stat, Pool}, material::{TextureMaterial,}, input::ActionState, formlist::{FormList, InjectCommands}, geometry::{Light, LightAnim, LightKind}, lua::{ScriptVar}, palette::{Palette, DynColor}}};
 
-use self::{color::RgbaColor, time::LuaTime, registry::Registry, entity::{LuaQuery, EntityAPI}, level::LevelAPI, random::RandomAPI, log::LogAPI, bevy_api::math::{LuaVec2, LuaVec3, MathAPI}};
+use self::{color::RgbaColor, time::LuaTime, registry::Registry, entity::{LuaQuery, EntityAPI}, level::LevelAPI, random::RandomAPI, log::LogAPI, bevy_api::{math::{LuaVec2, LuaVec3, MathAPI}, image::ImageAPI}, ui::{elem::{UIAPI}, atom::{LuaAtom}}};
 
 pub mod bevy_api;
 pub mod color;
@@ -15,20 +15,25 @@ pub mod message;
 pub mod random;
 pub mod registry;
 pub mod time;
+pub mod ui;
 
 pub fn register_lua_mods(lua: &Lua) -> Result<(), LuaError> {
     init_luamod::<ActionState>(lua)?;
+    init_luamod::<DynColor>(lua)?;
     init_luamod::<FormList>(lua)?;
     init_luamod::<EntityAPI>(lua)?;
+    init_luamod::<ImageAPI>(lua)?;
     init_luamod::<InjectCommands>(lua)?;
+    init_luamod::<LuaAtom>(lua)?;
+    init_luamod::<LuaQuery>(lua)?;
+    init_luamod::<LuaTime>(lua)?;
+    init_luamod::<LuaVec2>(lua)?;
+    init_luamod::<LuaVec3>(lua)?;
     init_luamod::<LevelAPI>(lua)?;
     init_luamod::<Light>(lua)?;
     init_luamod::<LightAnim>(lua)?;
     init_luamod::<LightKind>(lua)?;
     init_luamod::<LogAPI>(lua)?;
-    init_luamod::<LuaQuery>(lua)?;
-    init_luamod::<LuaVec2>(lua)?;
-    init_luamod::<LuaVec3>(lua)?;
     init_luamod::<MathAPI>(lua)?;
     init_luamod::<Palette>(lua)?;
     init_luamod::<RandomAPI>(lua)?;
@@ -38,7 +43,7 @@ pub fn register_lua_mods(lua: &Lua) -> Result<(), LuaError> {
     init_luamod::<Pool>(lua)?;
     init_luamod::<RgbaColor>(lua)?;
     init_luamod::<Stat>(lua)?;
-    init_luamod::<LuaTime>(lua)?;
+    init_luamod::<UIAPI>(lua)?;
     attach_prelude_lua(lua)?;
     Ok(())
 }
@@ -59,6 +64,11 @@ pub fn init_luamod<T>(lua: &Lua) -> Result<(), mlua::Error> where T: LuaMod {
 // Default API
 
 fn attach_prelude_lua(lua: &Lua) -> Result<(), mlua::Error> {
+    let mut buf = FileAssetIo::get_base_path();
+    buf.push("assets");
+    let package: LuaTable = lua.globals().get("package")?;
+    package.set("path", format!("{}/?.lua", buf.as_os_str().to_string_lossy()))?;
+
     lua.globals().set("format", lua.create_function(|_lua, values: LuaMultiValue| {
         format_lua(values)
     })?)?;

@@ -1,6 +1,9 @@
 use bevy::{prelude::*, render::{texture::{ImageSampler}, render_resource::{SamplerDescriptor, FilterMode, Extent3d, TextureDimension, TextureFormat}}, asset::LoadState};
+use bevy_egui::EguiContext;
 
 use crate::data::{material::{TexMatInfo, MaterialColors, MaterialsToInit, TextureMaterial, LoadedMat, resolve_texture_path}};
+
+use super::ui::UIAssets;
 
 #[derive(Clone, Debug, Default)]
 pub struct TexturePlugin;
@@ -51,10 +54,12 @@ pub fn log_asset_errors(
 }
 
 pub fn update_image_descriptor(
-    tex_mat_info: Res<TexMatInfo>,
-    mut to_check: ResMut<ImagesToCheck>,
-    mut images: ResMut<Assets<Image>>,
-    mut events: EventReader<AssetEvent<Image>>,
+    tex_mat_info:  Res<TexMatInfo>,
+    mut egui_ctx:  ResMut<EguiContext>,
+    mut to_check:  ResMut<ImagesToCheck>,
+    mut ui_assets: ResMut<UIAssets>,
+    mut images:    ResMut<Assets<Image>>,
+    mut events:    EventReader<AssetEvent<Image>>,
 ) {
     let default_sampler = get_default_sampler();
     for e in events.iter() {
@@ -66,6 +71,7 @@ pub fn update_image_descriptor(
                     } else {
                         image.sampler_descriptor = default_sampler.clone();
                     }
+                    let _ = ui_assets.texture_id_or_insert(handle.clone_weak(), egui_ctx.as_mut());
                     to_check.vec.push(handle.clone());
                 }
             },
@@ -76,6 +82,7 @@ pub fn update_image_descriptor(
                     } else {
                         image.sampler_descriptor = default_sampler.clone();
                     }
+                    let _ = ui_assets.texture_id_or_insert(handle.clone_weak(), egui_ctx.as_mut());
                 }
             },
             _ => (),
