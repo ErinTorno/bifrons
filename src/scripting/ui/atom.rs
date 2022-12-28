@@ -1,13 +1,23 @@
-use std::fmt::Display;
+use std::{fmt::Display, collections::HashMap, mem};
 
 use bevy::prelude::{Resource, warn};
+use egui::text::LayoutJob;
 use mlua::prelude::*;
 
-use crate::{data::lua::{LuaWorld, TransVar, ScriptVar}, scripting::LuaMod};
+use crate::{data::{lua::{LuaWorld, TransVar, ScriptVar}, palette::DynColor}, scripting::{LuaMod, color::RgbaColor}};
+
+use super::{text::TextBuilder, elem::TextInst};
+
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+pub enum JobCacheKey {
+    Atom(usize),
+    TextInst(u64),
+}
 
 #[derive(Debug, Resource, Default)]
 pub struct LuaAtomRegistry {
-    pub atoms: Vec<LuaAtom>,
+    pub atoms:           Vec<LuaAtom>,
+    pub layoutjob_cache: HashMap<JobCacheKey, LayoutJob>,
 }
 impl LuaAtomRegistry {
     /// Views the current atom state, acknowledging changes as viewed if it isn't already
@@ -59,6 +69,33 @@ impl LuaAtomRegistry {
         }
     }
 
+    pub fn acknowledge_layout_job<F, C>(&mut self, or_atom: &OrAtom<TextInst>, eval_color: C, or_else: F) -> LayoutJob where F: FnOnce() -> String, C: FnMut(&DynColor) -> RgbaColor {
+        match or_atom {
+            OrAtom::Atom(a) => {
+                let atom = &mut self.atoms[a.index];
+                if !atom.acknowledged {
+                    let builder = match TextBuilder::try_from(atom.last_eval.clone()) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            warn!("atom#{} TransVar failed to convert to TextBuilder {}", a.index, e);
+                            TextBuilder::plain(or_else())
+                        },
+                    };
+                    let job = builder.to_layout_job(eval_color);
+                    self.layoutjob_cache.insert(JobCacheKey::Atom(a.index), job.clone());
+                    atom.acknowledged = true;
+                    job
+                } else {
+                    self.layoutjob_cache.get(&JobCacheKey::Atom(a.index)).unwrap().clone()
+                }
+
+            },
+            OrAtom::Val(v) => self.layoutjob_cache.entry(JobCacheKey::TextInst(v.id))
+                .or_insert_with(|| v.builder.clone().to_layout_job(eval_color))
+                .clone(),
+        }
+    }
+
     /// Views the current atom state without acknowledging it
     pub fn peek(&mut self, atom_ref: LuaAtomRef) -> TransVar {
         self.atoms[atom_ref.index].last_eval.clone()
@@ -94,7 +131,7 @@ impl LuaMod for LuaAtom {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct LuaAtomRef {
     index: usize,
 }
@@ -108,12 +145,14 @@ impl LuaAtomRef {
         lua.registry_value(&reg.atoms[self.index].key)
     }
 
-    pub fn set(&self, lua: &Lua, val: LuaValue) -> Result<(), mlua::Error> {
-        let world   = lua.globals().get::<_, LuaWorld>("world").unwrap();
-        let mut w   = world.write();
-        let mut reg = w.resource_mut::<LuaAtomRegistry>();
-        reg.atoms[self.index].last_eval = TransVar::from_lua(val, lua)?;
-        Ok(())
+    pub fn set<'a>(&self, lua: &'a Lua, val: LuaValue) -> Result<LuaValue<'a>, mlua::Error> {
+        let world     = lua.globals().get::<_, LuaWorld>("world").unwrap();
+        let mut w     = world.write();
+        let mut reg   = w.resource_mut::<LuaAtomRegistry>();
+        let last_eval = mem::replace(&mut reg.atoms[self.index].last_eval, TransVar::from_lua(val, lua)?);
+        
+        reg.atoms[self.index].acknowledged = false;
+        last_eval.to_lua(lua)
     }
 
     pub fn update(&self, lua: &Lua, f: LuaFunction) -> Result<(), mlua::Error> {
@@ -126,12 +165,13 @@ impl LuaAtomRef {
         let val: LuaValue = f.call(val)?;
         lua.replace_registry_value(key, val.clone())?;
         reg.atoms[self.index].last_eval = TransVar::from_lua(val, lua)?;
+        reg.atoms[self.index].acknowledged = false;
         Ok(())
     }
 }
 impl LuaUserData for LuaAtomRef {
-    fn add_fields<'lua, F: LuaUserDataFields<'lua, Self>>(_fields: &mut F) {
-        
+    fn add_fields<'lua, F: LuaUserDataFields<'lua, Self>>(fields: &mut F) {
+        fields.add_field_method_get("index", |_, this| Ok(this.index));
     }
 
     fn add_methods<'lua, M: LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
@@ -145,7 +185,7 @@ impl LuaUserData for LuaAtomRef {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 pub enum OrAtom<T> {
     Atom(LuaAtomRef),
     Val(T),

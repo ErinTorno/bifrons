@@ -35,7 +35,6 @@ impl Plugin for PalettePlugin {
 #[derive(Clone, Debug, Reflect, Resource)]
 pub struct LoadingPalette {
     pub handle: Handle<Palette>,
-    pub entity: Entity,
 }
 
 fn load_default_palette(
@@ -65,14 +64,25 @@ fn setup_palette(
     mut mats_to_init:    ResMut<MaterialsToInit>,
     mut loaded_palettes: ResMut<LoadedPalettes>,
     query_to_init:       Query<&ToInitScripts>,
+    mut palette_entity:  Local<Option<Entity>>,
 ) {
+    fn finish_loading(commands: &mut Commands, palette_entity: &mut Option<Entity>) {
+        *palette_entity = None;
+        commands.remove_resource::<LoadingPalette>();
+    }
+
     if let Some(st) = loaded_palettes.by_handle.get(&loading_palette.handle).cloned() {
         loaded_palettes.current_handle = loading_palette.handle.clone();
         loaded_palettes.current_state = st;
         mats_to_init.0.extend(material_colors.by_handle.keys().map(|h| h.clone_weak()));
-        commands.remove_resource::<LoadingPalette>();
+        finish_loading(&mut commands, &mut palette_entity);
     } else if let Some(palette) = palettes.get(&loading_palette.handle) {
-        let entity = loading_palette.entity;
+        let entity = palette_entity.unwrap_or_else(|| {
+            loaded_palettes.by_handle.get(&loading_palette.handle).map(|st| st.entity).unwrap_or_else(|| {
+                commands.spawn_empty().id()
+            })
+        });
+        *palette_entity = Some(entity);
         if let Some(file) = palette.get_script() {
             if let Some(hs) = lua_instances.by_path.get(file) && let Some(script_id) = hs.get(&entity) {
                 info!("Script refs loaded, time to switch");
@@ -81,7 +91,7 @@ fn setup_palette(
                 loaded_palettes.current_state = st;
                 loaded_palettes.by_handle.insert(loading_palette.handle.clone(), st);
                 mats_to_init.0.extend(material_colors.by_handle.keys().map(|h| h.clone_weak()));
-                commands.remove_resource::<LoadingPalette>();
+                finish_loading(&mut commands, &mut palette_entity);
             } else if let Err(_) = query_to_init.get(entity) {
                 let mut handles = HashMap::new();
                 handles.insert(lua_instances.gen_next_id(), asset_server.load(file));
@@ -97,7 +107,7 @@ fn setup_palette(
             loaded_palettes.current_state = st;
             loaded_palettes.by_handle.insert(loading_palette.handle.clone(), st);
             mats_to_init.0.extend(material_colors.by_handle.keys().map(|h| h.clone_weak()));
-            commands.remove_resource::<LoadingPalette>();
+            finish_loading(&mut commands, &mut palette_entity);
         }
     }
 }

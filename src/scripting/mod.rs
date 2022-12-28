@@ -3,25 +3,27 @@ use mlua::prelude::*;
 
 use crate::{data::{stat::{Stat, Pool}, material::{TextureMaterial,}, input::ActionState, formlist::{FormList, InjectCommands}, geometry::{Light, LightAnim, LightKind}, lua::{ScriptVar}, palette::{Palette, DynColor}}};
 
-use self::{color::RgbaColor, time::LuaTime, registry::Registry, entity::{LuaQuery, EntityAPI}, level::LevelAPI, random::RandomAPI, log::LogAPI, bevy_api::{math::{LuaVec2, LuaVec3, MathAPI}, image::ImageAPI}, ui::{elem::{UIAPI}, atom::{LuaAtom}}};
+use self::{color::RgbaColor, time::LuaTime, entity::{LuaQuery, EntityAPI}, level::LevelAPI, random::RandomAPI, log::LogAPI, bevy_api::{math::{LuaVec2, LuaVec3, MathAPI}, image::ImageAPI}, ui::{elem::{UIAPI}, atom::{LuaAtom}, text::{TextBuilder, TextStyle}, font::UIFont}, file::FileAPI};
 
 pub mod bevy_api;
 pub mod color;
 pub mod entity;
 pub mod event;
+pub mod file;
 pub mod level;
 pub mod log;
 pub mod message;
 pub mod random;
-pub mod registry;
 pub mod time;
 pub mod ui;
 
 pub fn register_lua_mods(lua: &Lua) -> Result<(), LuaError> {
     init_luamod::<ActionState>(lua)?;
     init_luamod::<DynColor>(lua)?;
+    init_luamod::<UIFont>(lua)?;
     init_luamod::<FormList>(lua)?;
     init_luamod::<EntityAPI>(lua)?;
+    init_luamod::<FileAPI>(lua)?;
     init_luamod::<ImageAPI>(lua)?;
     init_luamod::<InjectCommands>(lua)?;
     init_luamod::<LuaAtom>(lua)?;
@@ -37,8 +39,9 @@ pub fn register_lua_mods(lua: &Lua) -> Result<(), LuaError> {
     init_luamod::<MathAPI>(lua)?;
     init_luamod::<Palette>(lua)?;
     init_luamod::<RandomAPI>(lua)?;
-    init_luamod::<Registry>(lua)?;
     init_luamod::<ScriptVar>(lua)?;
+    init_luamod::<TextBuilder>(lua)?;
+    init_luamod::<TextStyle>(lua)?;
     init_luamod::<TextureMaterial>(lua)?;
     init_luamod::<Pool>(lua)?;
     init_luamod::<RgbaColor>(lua)?;
@@ -72,12 +75,8 @@ fn attach_prelude_lua(lua: &Lua) -> Result<(), mlua::Error> {
     lua.globals().set("format", lua.create_function(|_lua, values: LuaMultiValue| {
         format_lua(values)
     })?)?;
-    lua.globals().set("PI", std::f64::consts::PI)?;
     lua.globals().set("string", lua.create_function(|_lua, value: LuaValue| {
         lua_to_string(value)
-    })?)?;
-    lua.globals().set("finite_or", lua.create_function(|_lua, (n, def): (f32, f32)| {
-        Ok(if n.is_finite() { n } else { def })
     })?)?;
     lua.set_warning_function(|_, str, _| {
         error!("{:?}", str);

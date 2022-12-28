@@ -20,6 +20,7 @@ A co-op exploration horror game using Bevy and written in Rust.
 - [OpenDyslexic](https://opendyslexic.org/) as **assets/fonts/OpenDyslexic-Regular.otf** and in logo
 
 #### Ubuntu ([Ubuntu font licence](https://ubuntu.com/legal/font-licence))
+- [Ubuntu Condensed](https://design.ubuntu.com/font/) as **assets/fonts/Ubuntu-C.ttf**
 - [Ubuntu Monospace](https://design.ubuntu.com/font/) as **assets/fonts/UbuntuMono-R.ttf**
 
 ### Palette

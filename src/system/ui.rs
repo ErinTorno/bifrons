@@ -2,10 +2,9 @@ use std::collections::{HashMap};
 
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContext};
-use iyes_loopless::prelude::{IntoConditionalSystem};
 use mlua::prelude::*;
 
-use crate::{scripting::{ui::{elem::*, atom::{LuaAtomRegistry}}}, data::{lua::InstanceRef, font::Font, palette::{Palette, ColorCache, LoadedPalettes, DynColor}}, system::lua::LuaInstance};
+use crate::{scripting::{ui::{elem::*, atom::{LuaAtomRegistry}, font::UIFont}}, data::{lua::InstanceRef, palette::{Palette, ColorCache, LoadedPalettes, DynColor}}};
 
 use super::lua::SharedInstances;
 
@@ -15,22 +14,20 @@ pub struct ScriptingUiPlugin;
 impl Plugin for ScriptingUiPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         app
-            .init_resource::<LoadingUIAssets>()
             .init_resource::<UIAssets>()
             .init_resource::<VisibleContainers>()
             .add_startup_system(setup_default_ui_assets)
-            .add_system(init_ui_assets.run_if_resource_exists::<LoadingUIAssets>())
+            .add_system(load_fonts)
             .add_system(run_containers)
         ;
     }
 }
 
-#[derive(Clone, Copy, Default, Resource)]
-pub struct LoadingUIAssets;
-
 #[derive(Clone, Default, Resource)]
 pub struct UIAssets {
-    pub font_mono:          Handle<Font>,
+    pub font_monospace:     Handle<UIFont>,
+    pub font_proportional:  Handle<UIFont>,
+    pub names_by_font:      HashMap<Handle<UIFont>, String>,
     pub texture_ids:        HashMap<Handle<Image>, egui::TextureId>,
     pub missing_texture:    Handle<Image>,
     pub missing_texture_id: egui::TextureId,
@@ -60,30 +57,46 @@ pub fn setup_default_ui_assets(
     mut ui_assets: ResMut<UIAssets>,
     mut egui_ctx:  ResMut<EguiContext>,
 ) {
-    ui_assets.font_mono = asset_server.load("fonts/UbuntuMono-R.ttf");
+    ui_assets.font_monospace    = asset_server.load("fonts/UbuntuMono-R.ttf");
+    ui_assets.font_proportional = asset_server.load("fonts/Ubuntu-C.ttf");
     ui_assets.missing_texture = asset_server.load("missing.ktx2");
     let missing_handle = ui_assets.missing_texture.clone_weak();
     ui_assets.missing_texture_id = ui_assets.texture_id_or_insert(missing_handle, egui_ctx.as_mut());
 }
 
-pub fn init_ui_assets(
-    mut commands:  Commands,
-    fonts:         Res<Assets<Font>>,
-    ui_assets:     Res<UIAssets>,
+pub fn load_fonts(
+    fonts:         Res<Assets<UIFont>>,
+    mut ui_assets: ResMut<UIAssets>,
     mut egui_ctx:  ResMut<EguiContext>,
+    mut events:    EventReader<AssetEvent<UIFont>>,
 ) {
-    if let Some(mono_font) = fonts.get(&ui_assets.font_mono) {
-        let mut fonts = egui::FontDefinitions::default();
+    for e in events.iter() {
+        match e {
+            AssetEvent::Created { handle: this_handle } => {
+                let this_handle_id = this_handle.clone_weak_untyped().id;
+                // todo find way that doesn't require copying all font data every time
+                let mut font_defs = egui::FontDefinitions::default();
 
-        fonts.font_data.insert("mono".to_string(), mono_font.0.clone());
+                let mono  = ui_assets.font_monospace.clone_weak_untyped().id;
+                let propo = ui_assets.font_proportional.clone_weak_untyped().id;
+                for (handle, font) in fonts.iter() {
+                    font_defs.font_data.insert(font.name.clone(), font.data.clone());
 
-        fonts.families.entry(egui::FontFamily::Monospace   ).or_default().insert(0, "mono".to_string());
-        fonts.families.entry(egui::FontFamily::Proportional).or_default().insert(0, "mono".to_string());
+                    if handle == mono {
+                        font_defs.families.entry(egui::FontFamily::Monospace).or_default().insert(0, font.name.clone());
+                    } else if handle == propo {
+                        font_defs.families.entry(egui::FontFamily::Proportional).or_default().insert(0, font.name.clone());
+                    }
+                    if handle == this_handle_id {
+                        ui_assets.names_by_font.insert(this_handle.clone_weak(), font.name.clone());
+                    }
+                }
 
-        let ctx = egui_ctx.ctx_mut();
-        ctx.set_fonts(fonts);
-
-        commands.remove_resource::<LoadingUIAssets>()
+                let ctx = egui_ctx.ctx_mut();
+                ctx.set_fonts(font_defs);
+            },
+            _ => (),
+        }
     }
 }
 
@@ -118,76 +131,150 @@ pub fn run_containers(
     struct RunElem<'a> { f: &'a dyn Fn(&RunElem, &Elem, &mut RunElemEnv, ShowTo) -> () }
     let run_elem = RunElem {
         f: &|run_elem, elem, env, show_to| {
-            let size = env.atom_reg.acknowledge_option(elem.size.clone());
-            let size = size.map(|s| egui::Vec2::new(s.x, s.y));
-            match &elem.kind {
-                ElemKind::Horizontal { children } => {
-                    match show_to {
-                        ShowTo::TopLevel => { warn!("Horizontal not supported at TopLevel"); },
-                        ShowTo::Ui(ui) => {
-                            ui.horizontal(|ui| {
-                                for child in children.iter() {
-                                    (run_elem.f)(run_elem, child, env, ShowTo::Ui(ui));
-                                }
-                            });
-                        },
+            if env.atom_reg.acknowledge_or_else(elem.is_visible, || true) {
+                let size = env.atom_reg.acknowledge_option(elem.size.clone());
+                let size = size.map(|s| egui::Vec2::new(s.x, s.y));
+                let response: Option<egui::Response> = match &elem.kind {
+                    ElemKind::Horizontal { children } => {
+                        match show_to {
+                            ShowTo::TopLevel => { warn!("Horizontal not supported at TopLevel"); None },
+                            ShowTo::Ui(ui) => {
+                                Some(ui.horizontal(|ui| {
+                                    for child in children.iter() {
+                                        (run_elem.f)(run_elem, child, env, ShowTo::Ui(ui));
+                                    }
+                                }).response)
+                            },
+                        }
+                    },
+                    ElemKind::Vertical { children } => {
+                        match show_to {
+                            ShowTo::TopLevel => { warn!("Vertical not supported at TopLevel"); None },
+                            ShowTo::Ui(ui) => {
+                                Some(ui.vertical(|ui| {
+                                    for child in children.iter() {
+                                        (run_elem.f)(run_elem, child, env, ShowTo::Ui(ui));
+                                    }
+                                }).response)
+                            },
+                        }
+                    },
+                    ElemKind::Button { text } => {
+                        match show_to {
+                            ShowTo::TopLevel => { warn!("Button not supported at TopLevel"); None },
+                            ShowTo::Ui(ui) => {
+                                Some(ui.add(egui::Button::new(env.atom_reg.acknowledge_layout_job(
+                                    &text,
+                                    |c| env.color_cache
+                                        .simple_rgba(&c, loaded_palettes.as_ref(), palettes.as_ref(), shared_instances.as_ref()),
+                                    || "ERROR".to_string()
+                                ))))
+                            },
+                        }
+                    },
+                    ElemKind::ImageButton { image, color, is_framed, .. } => {
+                        let handle     = env.atom_reg.acknowledge_or_else(image.clone(), || ui_assets.missing_texture.clone_weak());
+                        let texture_id = ui_assets.texture_or_def(&handle);
+                        let color      = env.atom_reg.acknowledge_or_else(color.clone(), || DynColor::CONST_FUCHSIA);
+                        let rgba       = env.color_cache.simple_rgba(&color, loaded_palettes.as_ref(), palettes.as_ref(), shared_instances.as_ref());
+                        let is_framed  = env.atom_reg.acknowledge_or_else(*is_framed, || false);
+                        let elem       = egui::ImageButton::new(texture_id, size.unwrap_or(egui::Vec2::new(64., 64.)))
+                            .tint(egui::Color32::from(rgba))
+                            .frame(is_framed);
+                        Some(match show_to {
+                            ShowTo::TopLevel => {
+                                egui::Area::new(format!("floating{:?}", texture_id)).show(env.ctx, |ui| {
+                                    ui.add(elem)
+                                }).inner
+                            },
+                            ShowTo::Ui(ui) => {
+                                ui.add(elem)
+                            },
+                        })
+                    },
+                    ElemKind::Label { text } => {
+                        match show_to {
+                            ShowTo::TopLevel => { warn!("Label not supported at TopLevel"); None },
+                            ShowTo::Ui(ui) => {
+                                Some(ui.label(env.atom_reg.acknowledge_layout_job(
+                                    &text,
+                                    |c| env.color_cache
+                                        .simple_rgba(&c, loaded_palettes.as_ref(), palettes.as_ref(), shared_instances.as_ref()),
+                                    || "ERROR".to_string()
+                                )))
+                            },
+                        }
+                    },
+                    ElemKind::SidePanel { name, side, children } => {
+                        let elem = egui::SidePanel::new(*side, name.clone());
+                        Some(match show_to {
+                            ShowTo::TopLevel => {
+                                elem.show(env.ctx, |ui| {
+                                    for child in children.iter() {
+                                        (run_elem.f)(run_elem, child, env, ShowTo::Ui(ui));
+                                    }
+                                })
+                            },
+                            ShowTo::Ui(ui) => {
+                                elem.show_inside(ui, |ui| {
+                                    for child in children.iter() {
+                                        (run_elem.f)(run_elem, child, env, ShowTo::Ui(ui));
+                                    }
+                                })
+                            },
+                        }.response)
+                    },
+                    ElemKind::Menu { children } => {
+                        match show_to {
+                            ShowTo::TopLevel => { warn!("Menu not supported at TopLevel"); None },
+                            ShowTo::Ui(ui) => {
+                                Some(egui::menu::bar(ui, |ui| {
+                                    for (menu_name, children) in children.iter() {
+                                        let menu_name = env.atom_reg.acknowledge_or_else(menu_name.clone(), || "ERROR".to_string());
+                                        ui.menu_button(menu_name, |ui| {
+                                            for child in children.iter() {
+                                                (run_elem.f)(run_elem, child, env, ShowTo::Ui(ui));
+                                            }
+                                        });
+                                    }
+                                }).response)
+                            },
+                        }
+                    },
+                    ElemKind::VerticalPanel { name, side, children } => {
+                        let elem = egui::TopBottomPanel::new(*side, name.clone());
+                        Some(match show_to {
+                            ShowTo::TopLevel => {
+                                elem.show(env.ctx, |ui| {
+                                    for child in children.iter() {
+                                        (run_elem.f)(run_elem, child, env, ShowTo::Ui(ui));
+                                    }
+                                })
+                            },
+                            ShowTo::Ui(ui) => {
+                                elem.show_inside(ui, |ui| {
+                                    for child in children.iter() {
+                                        (run_elem.f)(run_elem, child, env, ShowTo::Ui(ui));
+                                    }
+                                })
+                            },
+                        }.response)
+                    },
+                };
+
+                if let Some(response) = response {
+                    if response.clicked() {
+                        call_on_click(&elem.on_click, env.inst_ref);
                     }
-                },
-                ElemKind::Vertical { children } => {
-                    match show_to {
-                        ShowTo::TopLevel => { warn!("Vertical not supported at TopLevel"); },
-                        ShowTo::Ui(ui) => {
-                            ui.vertical(|ui| {
-                                for child in children.iter() {
-                                    (run_elem.f)(run_elem, child, env, ShowTo::Ui(ui));
-                                }
-                            });
-                        },
+                    if let Some(inst) = &elem.tooltip {
+                        response.on_hover_text(env.atom_reg.acknowledge_layout_job(
+                            &inst,
+                            |c| env.color_cache
+                                .simple_rgba(&c, loaded_palettes.as_ref(), palettes.as_ref(), shared_instances.as_ref()),
+                            || "ERROR".to_string()
+                        ));
                     }
-                },
-                ElemKind::ImageButton { on_click, image, color, is_framed, .. } => {
-                    let handle     = env.atom_reg.acknowledge_or_else(image.clone(), || ui_assets.missing_texture.clone_weak());
-                    let texture_id = ui_assets.texture_or_def(&handle);
-                    let color      = env.atom_reg.acknowledge_or_else(color.clone(), || DynColor::CONST_FUCHSIA);
-                    let rgba       = env.color_cache.simple_rgba(&color, loaded_palettes.as_ref(), palettes.as_ref(), shared_instances.as_ref());
-                    let is_framed  = env.atom_reg.acknowledge_or_else(*is_framed, || false);
-                    let elem       = egui::ImageButton::new(texture_id, size.unwrap_or(egui::Vec2::new(64., 64.)))
-                        .tint(egui::Color32::from(rgba))
-                        .frame(is_framed);
-                    match show_to {
-                        ShowTo::TopLevel => {
-                            egui::Area::new(format!("floating{:?}", texture_id)).show(env.ctx, |ui| {
-                                if ui.add(elem).clicked() {
-                                    call_on_click(on_click, env.inst_ref);
-                                }
-                            });
-                        },
-                        ShowTo::Ui(ui) => {
-                            if ui.add(elem).clicked() {
-                                call_on_click(on_click, env.inst_ref);
-                            }
-                        },
-                    }
-                },
-                ElemKind::SidePanel { name, side, children } => {
-                    let elem = egui::SidePanel::new(*side, name.clone());
-                    match show_to {
-                        ShowTo::TopLevel => {
-                            elem.show(env.ctx, |ui| {
-                                for child in children.iter() {
-                                    (run_elem.f)(run_elem, child, env, ShowTo::Ui(ui));
-                                }
-                            });
-                        },
-                        ShowTo::Ui(ui) => {
-                            elem.show_inside(ui, |ui| {
-                                for child in children.iter() {
-                                    (run_elem.f)(run_elem, child, env, ShowTo::Ui(ui));
-                                }
-                            });
-                        },
-                    }
-                },
+                }
             }
         },
     };

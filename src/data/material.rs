@@ -162,7 +162,7 @@ pub struct TextureMaterial {
     #[serde(default)]
     pub unlit:            bool,
 }
-fn default_emissive_color() -> DynColor { DynColor::Const(RgbaColor {r: 0., g: 0., b: 0., a: 1.}) }
+fn default_emissive_color() -> DynColor { DynColor::CONST_BLACK }
 fn default_metallic() -> f32 { 0.01 }
 fn default_reflectance() -> f32 { 0.5 }
 fn default_alpha_blend() -> bool { false }
@@ -237,7 +237,7 @@ impl TextureMaterial {
         texture: String::new(),
         normal_texture: None,
         mode: MaterialMode::Stretch,
-        color:          DynColor::Const(RgbaColor {r: 1., g: 0., b: 0.5, a: 1.}),
+        color:          DynColor::CONST_FUCHSIA,
         emissive_color: DynColor::CONST_BLACK,
         emissive_texture: None,
         metallic: 0.6,

@@ -3,7 +3,7 @@ use std::{collections::{HashMap, HashSet}};
 use bevy::{prelude::*};
 use iyes_loopless::prelude::IntoConditionalSystem;
 
-use crate::{data::{level::*, material::{TextureMaterial, AtlasIndex, TexMatInfo, MaterialColors, MaterialsToInit, LoadedMat}, geometry::{Shape, LightAnimState, LightAnim}, prefab::{PrefabLoader, Prefab}, lua::{LuaScript, ScriptVar, Hook, TransVar}}, scripting::{random, event::ON_ROOM_REVEAL}, util::InsertableWithPredicate};
+use crate::{data::{level::*, material::{TextureMaterial, AtlasIndex, TexMatInfo, MaterialColors, MaterialsToInit, LoadedMat}, geometry::{Shape, LightAnimState, LightAnim}, prefab::{PrefabLoader, Prefab}, lua::{LuaScript, Hook, TransVar}}, scripting::{random, event::ON_ROOM_REVEAL}, util::InsertableWithPredicate};
 
 use super::{texture::{MissingTexture, Background}, common::{fix_missing_extension, ToInitHandle}, lua::{ToInitScripts, SharedInstances, LuaQueue, HookCall}};
 

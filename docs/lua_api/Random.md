@@ -1,4 +1,4 @@
-# Random
+# 🎲 Random
 
 This module provides functions for getting random values.
 
@@ -6,7 +6,7 @@ Values are generated using the [ChaCha algorithm with 8 rounds](https://rust-ran
 
 ## bool
 ```lua
-function bool() -> bool
+Random.bool = function() -> bool
 ```
 Returns `true` or `false`.
 
@@ -18,7 +18,7 @@ end
 
 ## int
 ```lua
-function int(min: int, max: int) -> int
+Random.int = function(min: int, max: int) -> int
 ```
 Returns a whole integer between `min` and `max` (inclusive)
 
@@ -29,7 +29,7 @@ local b = Random.int(100, 999)
 
 ## key
 ```lua
-function key(table: table) -> any
+Random.key = function(table: table) -> any
 ```
 Returns a random key from the table, or `nil` if it's empty.
 ```lua
@@ -39,7 +39,7 @@ local b = Random.key({})
 
 ## kv
 ```lua
-function kv(table: table) -> any, any
+Random.kv = function(table: table) -> any, any
 ```
 Returns a random key-value pair from the table, or `nil` if it's empty.
 ```lua
@@ -48,7 +48,7 @@ local key, val = Random.kv({a = 1, b = 2, c = 3})
 
 ## number
 ```lua
-function number(min: number, max: number) -> number
+Random.number = function(min: number, max: number) -> number
 ```
 Returns a number between `min` and `max` (inclusive). If `min` is `nil`, then 0.0 to 1.0 (exclusive) is used instead.
 
@@ -59,7 +59,7 @@ local b = Random.number(0, 123)
 
 ## value
 ```lua
-function value(table: table) -> any
+Random.value = function(table: table) -> any
 ```
 Returns a random value from the table, or `nil` if it's empty.
 ```lua

@@ -39,3 +39,57 @@ impl<'w, 's, 'a> InsertableWithPredicate for EntityCommands<'w, 's, 'a> {
         self
     }
 }
+
+pub trait RoughlyEq<T> {
+    type Epsilon;
+    fn roughly_eq(self, that: T, epsilon: Self::Epsilon) -> bool;
+}
+impl RoughlyEq<f32> for f32 {
+    type Epsilon = f32;
+
+    fn roughly_eq(self, that: f32, epsilon: Self::Epsilon) -> bool {
+        self >= that - epsilon && self <= that + epsilon
+    }
+}
+impl RoughlyEq<f64> for f32 {
+    type Epsilon = f64;
+
+    fn roughly_eq(self, that: f64, epsilon: Self::Epsilon) -> bool {
+        self as f64 >= that - epsilon && self as f64 <= that + epsilon
+    }
+}
+impl RoughlyEq<f64> for f64 {
+    type Epsilon = f64;
+
+    fn roughly_eq(self, that: f64, epsilon: Self::Epsilon) -> bool {
+        self >= that - epsilon && self <= that + epsilon
+    }
+}
+impl RoughlyEq<f32> for f64 {
+    type Epsilon = f64;
+
+    fn roughly_eq(self, that: f32, epsilon: Self::Epsilon) -> bool {
+        self >= that as f64 - epsilon && self <= that as f64 + epsilon
+    }
+}
+pub trait RoughToBits<T> {
+    fn rough_to_bits(self) -> T;
+}
+impl RoughToBits<u32> for f32 {
+    fn rough_to_bits(self) -> u32 {
+        if self.is_nan() {
+            f32::NAN
+        } else {
+            (self * 100000.).round() / 100000.
+        }.to_bits()
+    }
+}
+impl RoughToBits<u64> for f64 {
+    fn rough_to_bits(self) -> u64 {
+        if self.is_nan() {
+            f64::NAN
+        } else {
+            (self * 100000.).round() / 100000.
+        }.to_bits()
+    }
+}

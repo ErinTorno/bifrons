@@ -11,21 +11,24 @@ function on_init()
     --     Entity.hide(light_ety)
     -- end
     -- Level.reveal()
-    -- local wrc = "world_reset_count"
-    -- -- if not already in registry, this is skipped
-    -- local exists = Registry.contains(wrc)
-    -- Registry.update(wrc, function(i) return i + 1 end)
-    -- Registry.alloc_if_new(wrc, function() return 0 end)
-    -- local count = Registry.get(wrc)
 
     -- let's cause an infinite loop!
     -- Level.change("levels/testing/testing_house")
 
     -- Palette.load("palettes/black_and_white"):on_load(function(handle)
-    --     Palette.change(handle)
+    --     Palette.swap(handle)
     -- end)
-    -- Palette.load("palettes/black_and_white"):on_load(Palette.change)
-    -- Palette.load("palettes/woodblock"):on_load(Palette.change)
+    -- Palette.load("palettes/black_and_white"):on_load(Palette.swap)
+    Palette.load("palettes/default"):on_load(function(handle)
+        local palette = handle:get()
+        -- for name, rgba in pairs(palette) do
+        --     Log.info("{} = {}", name, rgba)
+        -- end
+        Log.info("default has {} colors", #palette)
+        -- local prev_red = palette:set("red", Rgba.new(1, 0, 0))
+        -- Log.info("prev red was {}", prev_red)
+    end)
+    -- Palette.load("palettes/woodblock"):on_load(Palette.swap)
 
     Level.spawn_piece("pieces/kitchen", {
         parent = entity,
@@ -33,11 +36,10 @@ function on_init()
         reveal = true,
         pos    = Vec3.new(0, 0, -10),
     })
-    -- Palette.load("palettes/aom"):on_load(Palette.change)
+    -- Palette.load("palettes/aom"):on_load(Palette.swap)
     -- Palette.load("palettes/default"):on_load(function(handle)
     --     local palette = handle:get()
     --     palette.background = "red"
-    --     -- palette.background = Color "red" -- this explicitly casts to a DynColor
     --     palette:apply(handle)
     -- end)
 end

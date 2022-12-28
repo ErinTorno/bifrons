@@ -8,7 +8,7 @@ use parking_lot::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::scripting::{time::LuaTime, bevy_api::{LuaEntity, math::{LuaVec2, LuaVec3}, handle::LuaHandle}, color::RgbaColor, lua_to_string, LuaMod};
+use crate::{scripting::{time::LuaTime, bevy_api::{LuaEntity, math::{LuaVec2, LuaVec3}, handle::LuaHandle}, color::RgbaColor, lua_to_string, LuaMod, ui::text::TextBuilder}};
 
 use super::palette::{DynColor};
 
@@ -371,6 +371,7 @@ pub enum TransVar {
     AnyUserTable(Vec<(TransVar, TransVar)>),
     Entity(u64),
     Handle(LuaHandle),
+    Text(TextBuilder),
     Time(LuaTime),
     Var(ScriptVar),
 }
@@ -404,6 +405,8 @@ impl<'lua> FromLua<'lua> for TransVar {
                     Ok(TransVar::Handle(data.borrow::<LuaHandle>()?.clone()))
                 } else if data.is::<LuaTime>() {
                     Ok(TransVar::Time(data.borrow::<LuaTime>()?.clone()))
+                } else if data.is::<TextBuilder>() {
+                    Ok(TransVar::Text(data.borrow::<TextBuilder>()?.clone()))
                 } else {
                     Ok(TransVar::Var(ScriptVar::from_lua(LuaValue::UserData(data), _lua)?))
                 }
@@ -424,6 +427,7 @@ impl<'lua> ToLua<'lua> for TransVar {
             },
             TransVar::Entity(u) => Ok(LuaEntity::new(Entity::from_bits(u)).to_lua(lua)?),
             TransVar::Handle(h) => Ok(h.to_lua(lua)?),
+            TransVar::Text(b)   => Ok(b.to_lua(lua)?),
             TransVar::Time(t)   => Ok(t.to_lua(lua)?),
             TransVar::Var(v)    => Ok(v.to_lua(lua)?),
         }
@@ -560,6 +564,27 @@ impl TryFrom<TransVar> for Entity {
         match value {
             TransVar::Entity(b) => Ok(Entity::from_bits(b)),
             _ => Err(format!("Not an Entity {:?}", value)),
+        }
+    }
+}
+
+impl TryFrom<TransVar> for String {
+    type Error = String;
+    fn try_from(value: TransVar) -> Result<Self, Self::Error> {
+        match value {
+            TransVar::Var(ScriptVar::Str(s)) => Ok(s),
+            _ => Err(format!("Not a String {:?}", value)),
+        }
+    }
+}
+
+impl TryFrom<TransVar> for TextBuilder {
+    type Error = String;
+    fn try_from(value: TransVar) -> Result<Self, Self::Error> {
+        match value {
+            TransVar::Text(b) => Ok(b),
+            TransVar::Var(ScriptVar::Str(s)) => Ok(TextBuilder::plain(s)),
+            _ => Err(format!("Not a Text {:?}", value)),
         }
     }
 }

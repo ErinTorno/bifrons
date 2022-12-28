@@ -7,9 +7,10 @@
 
 use bevy_inspector_egui::WorldInspectorPlugin;
 use bevy_kira_audio::prelude::*;
-use bevy::{prelude::*, diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin}};
-use bevy_rapier3d::{prelude::{NoUserData, RapierPhysicsPlugin}, render::RapierDebugRenderPlugin};
-use data::{prefab::{Prefab, PrefabLoader}, level::{Level, LevelLoader, LevelPiece, LevelPieceLoader}, formlist::{FormList, FormListLoader}, font::{FontLoader, Font}};
+use bevy::{prelude::*, diagnostic::{LogDiagnosticsPlugin}};
+use bevy_rapier3d::{prelude::{NoUserData, RapierPhysicsPlugin}};
+use data::{prefab::{Prefab, PrefabLoader}, level::{Level, LevelLoader, LevelPiece, LevelPieceLoader}, formlist::{FormList, FormListLoader}};
+use scripting::ui::font::{FontLoader, UIFont};
 
 mod data;
 mod scripting;
@@ -37,7 +38,7 @@ fn main() {
         .add_plugin(system::scene::ScenePlugin)
         .add_plugin(system::texture::TexturePlugin)
         .add_plugin(system::ui::ScriptingUiPlugin)
-        .add_asset::<Font>()
+        .add_asset::<UIFont>()
         .add_asset::<FormList>()
         .add_asset::<Prefab>()
         .add_asset::<Level>()

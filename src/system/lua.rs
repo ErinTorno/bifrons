@@ -4,16 +4,16 @@ use std::{collections::{HashMap, HashSet}};
 use bevy::asset::LoadState;
 use bevy::ecs::system::SystemState;
 use bevy::{prelude::*};
-use bevy_inspector_egui::{RegisterInspectable, Inspectable};
+use bevy_inspector_egui::{RegisterInspectable};
 use iyes_loopless::prelude::FixedTimestepStage;
 use mlua::prelude::*;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 
 use crate::data::lua::{LuaScript, LuaScriptLoader, InstanceKind, InstanceRef, Hook, LuaWorld, Recipient, ScriptVar, LuaScriptVars, ManyTransVars};
+use crate::scripting::bevy_api::handle::{LuaAssetEventRegistry, AssetEventKey};
 use crate::scripting::event::{constants, ON_UPDATE, ON_INIT};
 use crate::scripting::register_lua_mods;
-use crate::scripting::registry::{Registry, AssetEventKey};
 use crate::scripting::time::LuaTime;
 use crate::scripting::ui::atom::LuaAtomRegistry;
 use crate::util::collections::Singleton;
@@ -34,7 +34,7 @@ impl Plugin for LuaPlugin {
         app
             .init_resource::<LuaAtomRegistry>()
             .init_resource::<LuaTime>()
-            .init_resource::<Registry>()
+            .init_resource::<LuaAssetEventRegistry>()
             .init_resource::<SharedInstances>()
             .add_asset::<LuaScript>()
             .init_asset_loader::<LuaScriptLoader>()
@@ -304,7 +304,7 @@ pub fn update_script_queue(
 }
 
 pub fn on_asset_load(
-    mut registry: ResMut<Registry>,
+    mut registry: ResMut<LuaAssetEventRegistry>,
     si:           Res<SharedInstances>,
     asset_server: Res<AssetServer>,
 ) {
