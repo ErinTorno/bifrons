@@ -30,6 +30,9 @@ References to assets managed by Bevy.
 ### [image](lua_api/types/Image.md)
 Image file loading.
 
+### [material](lua_api/types/Material.md)
+Objects defining how images are presented over a mesh.
+
 ### [palette](lua_api/types/Palette.md)
 Sets of colors that can be applied to the world.
 

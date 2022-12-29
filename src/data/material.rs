@@ -9,7 +9,7 @@ use crate::{scripting::{LuaMod, color::RgbaColor, bevy_api::{LuaEntity, handle::
 
 use super::{lua::{LuaWorld, Any3}, palette::{DynColor}};
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum RepeatType {
     Identity,
     Rotate180,
@@ -23,7 +23,7 @@ impl RepeatType {
     // }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub enum MaterialMode {
     Stretch,
     Repeat {
@@ -50,28 +50,26 @@ impl LuaUserData for MaterialMode {
     fn add_fields<'lua, F: mlua::UserDataFields<'lua, Self>>(_: &mut F) {}
 
     fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_meta_method(LuaMetaMethod::Eq, |_, this, that: MaterialMode| Ok(this == &that));
         methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(match this {
             MaterialMode::Stretch => "MatMode.stretch()".to_string(),
-            MaterialMode::Repeat { step, on_step }=> format!("MatMode.repeat{{step = {}, on_step = {}}}", step, format!("{:?}", on_step).to_lowercase()),
+            MaterialMode::Repeat { step, on_step }=> format!("MatMode.repeat{{step = {}, on_step = \"{}\"}}", step, format!("{:?}", on_step).to_lowercase()),
         }));
     }
 }
 impl LuaMod for MaterialMode {
     fn mod_name() -> &'static str { "MatMode" }
     fn register_defs(lua: &Lua, table: &mut LuaTable<'_>) -> Result<(), LuaError> {
-        table.set("stretch", lua.create_function(|_ctx, ()| Ok(MaterialMode::Stretch))?)?;
-        table.set("repeat", lua.create_function(|_ctx, table: LuaTable| {
-            let step = if table.contains_key("step")? {
-                table.get::<_, f32>("step")?
-            } else { default_step() };
-            let on_step = if table.contains_key("mode")? {
-                let mode = table.get::<_, String>("mode")?;
+        table.set("stretch", MaterialMode::Stretch.to_lua(lua)?)?;
+        table.set("repeat", lua.create_function(|_, table: LuaTable| {
+            let step = table.get::<_, Option<f32>>("step")?.unwrap_or(default_step());
+            let on_step = if let Some(mode) = table.get::<_, Option<String>>("mode")? {
                 match mode.as_str() {
                     "identity" => RepeatType::Identity,
                     "rotate180" => RepeatType::Rotate180,
                     _ => {
-                        return Err(LuaError::RuntimeError(format!("No known RepeatType \"{}\"; valid values are {{identity, rotate180}}", mode)));
-                    }
+                        return Err(LuaError::RuntimeError(format!("No known RepeatType \"{}\"; valid values are {{\"identity\", \"rotate180\"}}", mode)));
+                    },
                 }
             } else { default_on_step() };
             Ok(MaterialMode::Repeat { step, on_step })
@@ -86,7 +84,7 @@ pub struct AtlasIndex {
     pub col: f32,
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct Atlas {
     pub rows:    f32,
     pub columns: f32,
@@ -106,7 +104,8 @@ impl LuaUserData for Atlas {
     }
 
     fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
-        methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(format!("Atlas{{rows = {}, columns = {}, width = {}, height = {}}}", this.rows, this.columns, this.width, this.height)));
+        methods.add_meta_method(LuaMetaMethod::Eq, |_, this, that: Atlas| Ok(this == &that));
+        methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(format!("atlas{{rows = {}, columns = {}, width = {}, height = {}}}", this.rows, this.columns, this.width, this.height)));
     }
 }
 impl LuaMod for Atlas {
@@ -164,7 +163,7 @@ pub struct TextureMaterial {
 }
 fn default_emissive_color() -> DynColor { DynColor::CONST_BLACK }
 fn default_metallic() -> f32 { 0.01 }
-fn default_reflectance() -> f32 { 0.5 }
+fn default_reflectance() -> f32 { 0.25 }
 fn default_alpha_blend() -> bool { false }
 impl TextureMaterial {
     pub fn load_textures(&self, asset_server: &AssetServer) -> TextureHandles {
@@ -249,6 +248,8 @@ impl TextureMaterial {
 }
 impl LuaUserData for TextureMaterial {
     fn add_fields<'lua, F: mlua::UserDataFields<'lua, Self>>(fields: &mut F) {
+        fields.add_field_method_get("alpha_blend", |_, this| Ok(this.alpha_blend));
+        fields.add_field_method_set("alpha_blend", |_, this, alpha_blend| Ok(this.alpha_blend = alpha_blend));
         fields.add_field_method_get("atlas", |_, this| Ok(this.atlas.clone()));
         fields.add_field_method_set("atlas", |_, this, atlas| Ok(this.atlas = atlas));
         fields.add_field_method_get("color", |_, this| Ok(this.color.clone()));
@@ -263,16 +264,16 @@ impl LuaUserData for TextureMaterial {
             Any3::B(c) => { this.emissive_color = DynColor::Custom(c) },
             Any3::C(c) => { this.emissive_color = DynColor::Named(c) },
         }));
+        fields.add_field_method_get("emissive_texture", |_, this| Ok(this.emissive_texture.clone()));
+        fields.add_field_method_set("emissive_texture", |_, this, emissive_texture| Ok(this.emissive_texture = emissive_texture));
         fields.add_field_method_get("metallic", |_, this| Ok(this.metallic));
         fields.add_field_method_set("metallic", |_, this, metallic| Ok(this.metallic = metallic));
         fields.add_field_method_get("reflectance", |_, this| Ok(this.reflectance));
         fields.add_field_method_set("reflectance", |_, this, reflectance| Ok(this.reflectance = reflectance));
-        fields.add_field_method_get("alpha_blend", |_, this| Ok(this.alpha_blend));
-        fields.add_field_method_set("alpha_blend", |_, this, alpha_blend| Ok(this.alpha_blend = alpha_blend));
         fields.add_field_method_get("texture", |_, this| Ok(this.texture.clone()));
         fields.add_field_method_set("texture", |_, this, texture| Ok(this.texture = texture));
-        fields.add_field_method_get("emissive_texture", |_, this| Ok(this.emissive_texture.clone()));
-        fields.add_field_method_set("emissive_texture", |_, this, emissive_texture| Ok(this.emissive_texture = emissive_texture));
+        fields.add_field_method_get("mode", |_, this| Ok(this.mode.clone()));
+        fields.add_field_method_set("mode", |_, this, mode| Ok(this.mode = mode));
         fields.add_field_method_get("normal_texture", |_, this| Ok(this.normal_texture.clone()));
         fields.add_field_method_set("normal_texture", |_, this, normal_texture| Ok(this.normal_texture = normal_texture));
         fields.add_field_method_get("unlit", |_, this| Ok(this.unlit));
@@ -281,29 +282,8 @@ impl LuaUserData for TextureMaterial {
 
     fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(format!("{:?}", this)));
-        methods.add_method("add_to_assets", |ctx, this, ()| {
-            let world = ctx.globals().get::<_, LuaWorld>("world").unwrap();
-            let mut w = world.write();
-            let tex_handles = {
-                let asset_server = w.get_resource::<AssetServer>();
-                if asset_server.is_none() { return Err(LuaError::RuntimeError(format!("Unable to get AssetServer"))); }
-                this.load_textures(asset_server.unwrap())
-            };
-
-            let mat = {
-                let tex_mat_info = w.get_resource_mut::<TexMatInfo>();
-                if tex_mat_info.is_none() { return Err(LuaError::RuntimeError(format!("Unable to get TexMatInfo"))); }
-                let mut tex_mat_info = tex_mat_info.unwrap();
-                this.make_material(tex_handles, &mut tex_mat_info)
-            };
-
-            let materials = w.get_resource_mut::<Assets<StandardMaterial>>();
-            if materials.is_none() { return Err(LuaError::RuntimeError(format!("Unable to get Assets<StandardMaterial>"))); }
-            let mut materials = materials.unwrap();
-            Ok(LuaHandle::from(materials.add(mat)))
-        });
-        methods.add_method("apply", |ctx, this, mat_handle: LuaHandle| {
-            let world = ctx.globals().get::<_, LuaWorld>("world").unwrap();
+        methods.add_method("apply", |lua, this, mat_handle: LuaHandle| {
+            let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
             let mut w = world.write();
             let tex_handles = {
                 let asset_server = w.resource::<AssetServer>();
@@ -342,19 +322,38 @@ impl LuaUserData for TextureMaterial {
 impl LuaMod for TextureMaterial {
     fn mod_name() -> &'static str { "Material" }
     fn register_defs(lua: &Lua, table: &mut LuaTable<'_>) -> Result<(), LuaError> {
-        table.set("handle_of", lua.create_function(|ctx, entity: LuaEntity| {
-            let world = ctx.globals().get::<_, LuaWorld>("world").unwrap();
+        table.set("add_asset", lua.create_function(|lua, this: TextureMaterial| {
+            let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
+            let mut w = world.write();
+            let tex_handles = {
+                let asset_server = w.get_resource::<AssetServer>();
+                if asset_server.is_none() { return Err(LuaError::RuntimeError(format!("Unable to get AssetServer"))); }
+                this.load_textures(asset_server.unwrap())
+            };
+            let mat = {
+                let tex_mat_info = w.get_resource_mut::<TexMatInfo>();
+                if tex_mat_info.is_none() { return Err(LuaError::RuntimeError(format!("Unable to get TexMatInfo"))); }
+                let mut tex_mat_info = tex_mat_info.unwrap();
+                this.make_material(tex_handles, &mut tex_mat_info)
+            };
+            let materials = w.get_resource_mut::<Assets<StandardMaterial>>();
+            if materials.is_none() { return Err(LuaError::RuntimeError(format!("Unable to get Assets<StandardMaterial>"))); }
+            let mut materials = materials.unwrap();
+            Ok(LuaHandle::from(materials.add(mat)))
+        })?)?;
+        table.set("handle_of", lua.create_function(|lua, entity: LuaEntity| {
+            let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
             let w = world.read();
             if let Some(handle) = w.get::<Handle<StandardMaterial>>(entity.0) {
                 Ok(Some(LuaHandle::from(handle.clone())))
             } else { Ok(None) }
         })?)?;
-        table.set("handle_table", lua.create_function(|ctx, entity: LuaEntity| {
-            let world = ctx.globals().get::<_, LuaWorld>("world").unwrap();
+        table.set("handle_table", lua.create_function(|lua, entity: LuaEntity| {
+            let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
             let w = world.read();
             let entity = entity.0;
             if let Some(mats) = w.get::<LoadedMaterials>(entity) {
-                let table = ctx.create_table()?;
+                let table = lua.create_table()?;
                 for (name, handle) in mats.by_name.iter() {
                     table.set(name.as_str(), LuaHandle::from(handle.clone()))?;
                 }

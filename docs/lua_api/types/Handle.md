@@ -60,6 +60,11 @@ local w = my_handle:weak()
 local i = Image.load("example.png"):weak() -- this asset might immediately unload if no one else uses the same image!
 ```
 
+## handle:__eq
+```lua
+function handle:__eq(that: handle<any>) -> bool
+```
+
 ## handle:__tostring
 ```lua
 function handle:__tostring() -> string

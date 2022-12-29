@@ -170,6 +170,7 @@ impl LuaUserData for LuaHandle {
             }
         }
 
+        methods.add_meta_method(LuaMetaMethod::Eq, |_, this, that: LuaHandle| Ok(this == &that));
         methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(format!("#handle<{:?}>{{id = {:?}}}", this.kind, this.handle.id)));
         methods.add_method("get", |lua: &Lua, this: &LuaHandle, ()| {
             let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
@@ -240,6 +241,6 @@ impl LuaUserData for LuaHandle {
             let asset_server = w.get_resource::<AssetServer>().unwrap();
             Ok(this.get_path(asset_server))
         });
-        methods.add_method("weak", |lua, this, ()| Ok(this.clone_weak()));
+        methods.add_method("weak", |_, this, ()| Ok(this.clone_weak()));
     }
 }
