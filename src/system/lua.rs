@@ -10,7 +10,7 @@ use mlua::prelude::*;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 
-use crate::data::lua::{LuaScript, LuaScriptLoader, InstanceKind, InstanceRef, Hook, LuaWorld, Recipient, ScriptVar, LuaScriptVars, ManyTransVars};
+use crate::data::lua::{LuaScript, LuaScriptLoader, InstanceKind, InstanceRef, Hook, LuaWorld, Recipient, ScriptVar, LuaScriptVars};
 use crate::scripting::bevy_api::handle::{LuaAssetEventRegistry, AssetEventKey};
 use crate::scripting::event::{constants, ON_UPDATE, ON_INIT};
 use crate::scripting::register_lua_mods;

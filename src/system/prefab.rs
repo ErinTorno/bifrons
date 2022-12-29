@@ -63,7 +63,6 @@ pub fn spawn_prefab(
             if let Some(mats) = loaded_mats {
                 loaded.by_name.extend((&mats.by_name).into_iter().map(|(k, v)| (k.clone(), v.clone())));
             }
-            
             commands.entity(entity).insert(loaded);
 
             if !prefab.tags.is_empty() {
