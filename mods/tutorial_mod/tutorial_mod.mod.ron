@@ -1,9 +1,9 @@
 #![enable(implicit_some)]
 (
     version:      (1,0,0),  // major.minor.patch
-    dependencies: ["core"], // these mods must be loaded for this mod to work
-    load_after:   [],       // def: [], this mod must be loaded after these if they are enabled
-    load_before:  [],       // def: [], this mod must be loaded before these if they are enabled
+    dependencies: { // these mods must be loaded for this mod to work
+        "core": Any,
+    },
     priority:     0.,       // def: 0.0, lowest priority loads first if all the above prereqs are met for multiple mods at once
     lines: {
         "english": {

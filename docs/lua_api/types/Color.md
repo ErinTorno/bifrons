@@ -57,7 +57,7 @@ local cool_red = red:eval(cool_palette_handle)
 
 ## color:__call
 ```lua
-function color:__call() -> rgba
+function color:__call(palette: handle<palette> or nil) -> rgba
 ```
 Alias for [eval](#color:eval).
 ```lua

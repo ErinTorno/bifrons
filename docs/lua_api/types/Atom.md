@@ -4,7 +4,7 @@ A wrapper around mutable values with on change detection capabilities. Used freq
 
 ## Atom.create
 ```lua
-Atom.create = function(a: any) -> atom
+Atom.create = function(a: t) -> atom<t>
 ```
 Creates an atom with the given starting value.
 

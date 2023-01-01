@@ -1,3 +1,13 @@
+use bitflags::bitflags;
+
+bitflags! {
+    pub struct EventFlag: u64 {
+        // const ON_INIT        = 0b0000; // every script subscribes to this
+        const ON_UPDATE      = 0b0001;
+        const ON_ROOM_REVEAL = 0b0010;
+    }
+}
+
 /// Called once when this script is being removed from an Entity or its Entity is removed
 /// *params:* ()
 /// todo! implement
@@ -25,10 +35,10 @@ pub const _ON_LANG_CHANGE: &str = "on_lang_change";
 pub const _ON_LOAD:        &str = "on_load";
 
 /// Called when a room is revealed on the map (including at setup for (reveal_before_entry: true))
-/// *params:* (context: {
+/// *params:* (
 ///     name:   String, -- the room's name
 ///     entity: Entity, -- the room's entity
-/// })
+/// )
 pub const ON_ROOM_REVEAL: &str = "on_room_reveal";
 
 /// Called when a save state is being made while this script is active
@@ -56,3 +66,4 @@ pub mod constants {
     /// With 1/15, on_update is called 15 times a second
     pub const ON_UPDATE_DELAY: f32 = 1. / 15.;
 }
+

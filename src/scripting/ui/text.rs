@@ -235,7 +235,7 @@ impl LuaMod for TextStyle {
                 .unwrap_or_else(|| DEFAULT_TEXT_STYLE.background.clone());
             let color = table.get::<_, Option<LuaToDynColor>>("color")?
                 .map(DynColor::from_any)
-                .unwrap_or_else(|| DEFAULT_TEXT_STYLE.background.clone());
+                .unwrap_or_else(|| DEFAULT_TEXT_STYLE.color.clone());
 
             let font_size = table.get::<_, Option<f32>>("font_size")?
                 .unwrap_or(DEFAULT_TEXT_STYLE.font.size);

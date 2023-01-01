@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use bevy_egui::{egui, EguiContext};
 use mlua::prelude::*;
 
-use crate::{scripting::{ui::{elem::*, atom::{LuaAtomRegistry}, font::UIFont}}, data::{lua::InstanceRef, palette::{Palette, ColorCache, LoadedPalettes, DynColor}}};
+use crate::{scripting::{ui::{elem::*, atom::{LuaAtomRegistry, OrAtom}, font::UIFont}}, data::{lua::InstanceRef, palette::{Palette, ColorCache, LoadedPalettes, DynColor}}};
 
 use super::lua::SharedInstances;
 
@@ -15,6 +15,7 @@ impl Plugin for ScriptingUiPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         app
             .init_resource::<UIAssets>()
+            .init_resource::<UIStateCache>()
             .init_resource::<VisibleContainers>()
             .add_startup_system(setup_default_ui_assets)
             .add_system(load_fonts)
@@ -45,6 +46,11 @@ impl UIAssets {
             None         => self.missing_texture_id.clone(),
         }
     }
+}
+
+#[derive(Clone, Default, Resource)]
+pub struct UIStateCache {
+    pub elem_is_open: HashMap<egui::Id, bool>,
 }
 
 pub fn is_ui_focused(mut egui_ctx: ResMut<EguiContext>) -> bool {
@@ -105,13 +111,14 @@ enum ShowTo<'a> { TopLevel, Ui(&'a mut egui::Ui) }
 pub fn run_containers(
     containers:       Res<Assets<Container>>,
     palettes:         Res<Assets<Palette>>,
-    mut color_cache:  ResMut<ColorCache>,
     loaded_palettes:  Res<LoadedPalettes>,
     shared_instances: Res<SharedInstances>,
-    mut egui_ctx:     ResMut<EguiContext>,
-    mut atom_reg:     ResMut<LuaAtomRegistry>,
     ui_assets:        Res<UIAssets>,
     visibilities:     Res<VisibleContainers>,
+    mut color_cache:  ResMut<ColorCache>,
+    mut egui_ctx:     ResMut<EguiContext>,
+    mut atom_reg:     ResMut<LuaAtomRegistry>,
+    mut ui_cache:     ResMut<UIStateCache>,
 ) {
     fn call_on_click(maybe_key: &Option<LuaRegistryKey>, inst_ref: &InstanceRef) {
         if let Some(on_click) = maybe_key {
@@ -126,7 +133,8 @@ pub fn run_containers(
         inst_ref:    &'a InstanceRef,
         ctx:         &'a egui::Context,
         atom_reg:    &'a mut LuaAtomRegistry,
-        color_cache: &'a mut ColorCache
+        color_cache: &'a mut ColorCache,
+        ui_cache:    &'a mut UIStateCache,
     }
     struct RunElem<'a> { f: &'a dyn Fn(&RunElem, &Elem, &mut RunElemEnv, ShowTo) -> () }
     let run_elem = RunElem {
@@ -172,6 +180,23 @@ pub fn run_containers(
                             },
                         }
                     },
+                    ElemKind::Hyperlink { url, text } => {
+                        match show_to {
+                            ShowTo::TopLevel => { warn!("Hyperlink not supported at TopLevel"); None },
+                            ShowTo::Ui(ui) => {
+                                let url  = env.atom_reg.acknowledge_or_else(url.clone(), || "".to_string());
+                                Some(match text {
+                                    Some(t) => ui.hyperlink_to(env.atom_reg.acknowledge_layout_job(
+                                        &t,
+                                        |c| env.color_cache
+                                            .simple_rgba(&c, loaded_palettes.as_ref(), palettes.as_ref(), shared_instances.as_ref()),
+                                        || "ERROR".to_string()
+                                    ), url),
+                                    None => ui.hyperlink(url),
+                                })
+                            },
+                        }
+                    },
                     ElemKind::ImageButton { image, color, is_framed, .. } => {
                         let handle     = env.atom_reg.acknowledge_or_else(image.clone(), || ui_assets.missing_texture.clone_weak());
                         let texture_id = ui_assets.texture_or_def(&handle);
@@ -205,25 +230,6 @@ pub fn run_containers(
                             },
                         }
                     },
-                    ElemKind::SidePanel { name, side, children } => {
-                        let elem = egui::SidePanel::new(*side, name.clone());
-                        Some(match show_to {
-                            ShowTo::TopLevel => {
-                                elem.show(env.ctx, |ui| {
-                                    for child in children.iter() {
-                                        (run_elem.f)(run_elem, child, env, ShowTo::Ui(ui));
-                                    }
-                                })
-                            },
-                            ShowTo::Ui(ui) => {
-                                elem.show_inside(ui, |ui| {
-                                    for child in children.iter() {
-                                        (run_elem.f)(run_elem, child, env, ShowTo::Ui(ui));
-                                    }
-                                })
-                            },
-                        }.response)
-                    },
                     ElemKind::Menu { children } => {
                         match show_to {
                             ShowTo::TopLevel => { warn!("Menu not supported at TopLevel"); None },
@@ -241,8 +247,8 @@ pub fn run_containers(
                             },
                         }
                     },
-                    ElemKind::VerticalPanel { name, side, children } => {
-                        let elem = egui::TopBottomPanel::new(*side, name.clone());
+                    ElemKind::SidePanel { id, side, children } => {
+                        let elem = egui::SidePanel::new(*side, *id);
                         Some(match show_to {
                             ShowTo::TopLevel => {
                                 elem.show(env.ctx, |ui| {
@@ -259,6 +265,69 @@ pub fn run_containers(
                                 })
                             },
                         }.response)
+                    },
+                    ElemKind::VerticalPanel { id, side, children } => {
+                        let elem = egui::TopBottomPanel::new(*side, *id);
+                        Some(match show_to {
+                            ShowTo::TopLevel => {
+                                elem.show(env.ctx, |ui| {
+                                    for child in children.iter() {
+                                        (run_elem.f)(run_elem, child, env, ShowTo::Ui(ui));
+                                    }
+                                })
+                            },
+                            ShowTo::Ui(ui) => {
+                                elem.show_inside(ui, |ui| {
+                                    for child in children.iter() {
+                                        (run_elem.f)(run_elem, child, env, ShowTo::Ui(ui));
+                                    }
+                                })
+                            },
+                        }.response)
+                    },
+                    ElemKind::Window { id, title, is_closeable, is_open, is_resizable, has_scrollx, has_scrolly, children } => {
+                        let is_open_atom = env.atom_reg.acknowledge_or_else(*is_open, || true);
+
+                        if is_open_atom {
+                            let is_resizable  = env.atom_reg.acknowledge_or_else(*is_resizable, || false);
+                            let is_closeable  = env.atom_reg.acknowledge_or_else(*is_closeable, || false);
+                            let has_scrollx   = env.atom_reg.acknowledge_or_else(*has_scrollx, || false);
+                            let has_scrolly   = env.atom_reg.acknowledge_or_else(*has_scrolly, || false);
+                            let mut window = match title {
+                                Some(t) => egui::Window::new(env.atom_reg.acknowledge_layout_job(
+                                    &t,
+                                    |c| env.color_cache
+                                        .simple_rgba(&c, loaded_palettes.as_ref(), palettes.as_ref(), shared_instances.as_ref()),
+                                    || "ERROR".to_string()
+                                )),
+                                None => egui::Window::new("")
+                            }.id(*id)
+                                .resizable(is_resizable)
+                                .scroll2([has_scrollx, has_scrolly]);
+    
+                            let mut is_open_bool = is_open_atom;
+                            if is_closeable {
+                                if let OrAtom::Val(b) = is_open {
+                                    is_open_bool = env.ui_cache.elem_is_open.get(id).cloned().unwrap_or(*b);
+                                }
+                                window = window.open(&mut is_open_bool);
+                            }
+                            if title.is_none() {
+                                window = window.title_bar(false);
+                            }
+    
+                            let opt_response = window.show(env.ctx, |ui| {
+                                for child in children.iter() {
+                                    (run_elem.f)(run_elem, child, env, ShowTo::Ui(ui));
+                                }
+                            });
+                            if is_open_atom != is_open_bool && let OrAtom::Atom(a) = is_open {
+                                env.atom_reg.set(a.clone(), is_open_bool);
+                            } else {
+                                env.ui_cache.elem_is_open.insert(*id, is_open_bool);
+                            }
+                            opt_response.map(|r| r.response)
+                        } else { None }
                     },
                 };
 
@@ -288,6 +357,7 @@ pub fn run_containers(
                     atom_reg: &mut atom_reg,
                     color_cache: &mut color_cache,
                     ctx: egui_ctx.ctx_mut(),
+                    ui_cache: &mut ui_cache,
                 };
                 (run_elem.f)(&run_elem, elem, &mut env, ShowTo::TopLevel);
             }

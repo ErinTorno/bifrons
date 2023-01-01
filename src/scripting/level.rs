@@ -1,7 +1,7 @@
 use bevy::{prelude::*, transform::TransformBundle};
 use mlua::prelude::*;
 
-use crate::{system::{level::{LoadedLevel}, common::{ToInitHandle, fix_missing_extension}}, data::{level::{LevelPiece, LevelPieceLoader, Level, LevelLoader}, lua::LuaWorld}};
+use crate::{system::{level::{LoadedLevel, LoadingLevel}, common::{ToInitHandle, fix_missing_extension}}, data::{level::{LevelPiece, LevelPieceLoader, Level, LevelLoader}, lua::LuaWorld}};
 
 use super::{LuaMod, bevy_api::{LuaEntity, handle::LuaHandle, math::LuaVec3}};
 
@@ -13,14 +13,14 @@ impl LuaMod for LevelAPI {
         table.set("change", lua.create_function(|lua, path: String| {
                 let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
                 let path = fix_missing_extension::<LevelLoader>(path);
-                let _handle: Handle<Level> = {
+                let handle: Handle<Level> = {
                     let w = world.read();
                     let asset_server = w.get_resource::<AssetServer>().unwrap();
                     asset_server.load(&path)
                 };
                 let mut w = world.write();
                 w.remove_resource::<LoadedLevel>();
-                // todo insert Loading resource
+                w.insert_resource(LoadingLevel { handle });
                 Ok(())
             })?
         )?;

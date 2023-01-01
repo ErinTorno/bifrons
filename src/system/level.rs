@@ -3,9 +3,9 @@ use std::{collections::{HashMap, HashSet}};
 use bevy::{prelude::*};
 use iyes_loopless::prelude::IntoConditionalSystem;
 
-use crate::{data::{level::*, material::{TextureMaterial, AtlasIndex, TexMatInfo, MaterialColors, MaterialsToInit, LoadedMat}, geometry::{Shape, LightAnimState, LightAnim}, prefab::{PrefabLoader, Prefab}, lua::{LuaScript, Hook, TransVar}}, scripting::{random, event::ON_ROOM_REVEAL}, util::InsertableWithPredicate};
+use crate::{data::{level::*, material::{TextureMaterial, AtlasIndex, TexMatInfo, MaterialColors, MaterialsToInit, LoadedMat}, geometry::{Shape, LightAnimState, LightAnim}, prefab::{PrefabLoader, Prefab}, lua::{LuaScript, Hook, ManyTransVars}}, scripting::{random, event::{ON_ROOM_REVEAL, EventFlag}}, util::InsertableWithPredicate};
 
-use super::{texture::{MissingTexture, Background}, common::{fix_missing_extension, ToInitHandle}, lua::{ToInitScripts, SharedInstances, LuaQueue, HookCall}};
+use super::{texture::{MissingTexture, Background}, common::{fix_missing_extension, ToInitHandle}, lua::{ToInitScripts, SharedInstances, LuaQueue, HookCall, LuaEventQueue, EventCall}};
 
 #[derive(Clone, Debug, Default)]
 pub struct LevelPlugin;
@@ -13,8 +13,6 @@ pub struct LevelPlugin;
 impl Plugin for LevelPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         app
-            .init_resource::<LoadingLevel>()
-            .add_startup_system(startup)
             .add_system(spawn_level_piece)
             .add_system(spawn_room)
             .add_system(load_level
@@ -27,14 +25,9 @@ impl Plugin for LevelPlugin {
     }
 }
 
-#[derive(Default, Resource)]
+#[derive(Resource)]
 pub struct LoadingLevel {
     pub handle: Handle<Level>,
-}
-
-pub fn startup(mut st: ResMut<LoadingLevel>, asset_server: Res<AssetServer>) {
-    let path      = "levels/testing/testing_house.level.ron";
-    st.handle     = asset_server.load(path);
 }
 
 pub fn load_level(
@@ -188,6 +181,7 @@ pub fn spawn_room(
     background:       Res<Background>,
     asset_server:     Res<AssetServer>,
     mut meshes:       ResMut<Assets<Mesh>>,
+    mut event_queue:  ResMut<LuaEventQueue>,
     query:            Query<(Entity, &ToSpawnRoom)>,
 ) {
     let background_texmat = TextureMaterial::BACKGROUND;
@@ -270,18 +264,28 @@ pub fn spawn_room(
             });
 
         if is_revealed {
-            let mut args = HashMap::<String, TransVar>::new();
-            args.insert("name".into(), room_name.clone().into());
-            args.insert("entity".into(), room_entity.clone().into());
+            let args = ManyTransVars(vec![
+                room_name.clone().into(),
+                room_entity.clone().into(),
+            ]);
             commands.entity(room_entity).insert(LuaQueue {
                 calls: vec![HookCall {
                     script_ids: waiting_scripts.clone(),
                     hook: Hook {
                         name: ON_ROOM_REVEAL.into(),
-                        args: (args,).into(),
+                        args: args.clone(),
                     },
                 }]
             });
+            event_queue.calls.push(
+                EventCall {
+                    flag: EventFlag::ON_ROOM_REVEAL,
+                    hook: Hook {
+                        name: ON_ROOM_REVEAL.into(),
+                        args,
+                    },
+                }
+            );
         }
     }
 }

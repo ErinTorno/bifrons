@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::data::lua::{LuaScript, LuaScriptLoader, InstanceKind, InstanceRef, Hook, LuaWorld, ScriptVar, LuaScriptVars};
 use crate::scripting::bevy_api::handle::{LuaAssetEventRegistry, AssetEventKey};
-use crate::scripting::event::{constants, ON_UPDATE, ON_INIT};
+use crate::scripting::event::{constants, ON_UPDATE, ON_INIT, EventFlag, ON_ROOM_REVEAL};
 use crate::scripting::register_lua_mods;
 use crate::scripting::time::LuaTime;
 use crate::scripting::ui::atom::LuaAtomRegistry;
@@ -26,6 +26,7 @@ impl Plugin for LuaPlugin {
         let mut on_update = SystemStage::single_threaded();
         on_update
             .add_system(send_on_update)
+            .add_system(update_script_event_queue)
             .add_system(on_asset_load);
 
         let mut on_queue_collect = SystemStage::parallel();
@@ -33,6 +34,7 @@ impl Plugin for LuaPlugin {
         
         app
             .init_resource::<LuaAtomRegistry>()
+            .init_resource::<LuaEventQueue>()
             .init_resource::<LuaTime>()
             .init_resource::<LuaAssetEventRegistry>()
             .init_resource::<SharedInstances>()
@@ -41,12 +43,12 @@ impl Plugin for LuaPlugin {
             .add_system(init_lua_script)
             .add_stage_before(
                 CoreStage::Update,
-                "on_update",
+                "lua_events",
                 FixedTimestepStage::new(Duration::from_secs_f32(constants::ON_UPDATE_DELAY), ON_UPDATE).with_stage(on_update),
             )
             .add_stage_after(
                 CoreStage::PostUpdate,
-                "on_queue_collect",
+                "lua_queue_collect",
                 on_queue_collect,
             )
             .register_type::<InstanceKind>()
@@ -65,10 +67,19 @@ pub struct HookCall {
 impl HookCall {
     pub fn next_frame(hook: Hook) -> Self { HookCall { script_ids: HashSet::singleton(SharedInstances::COLLECTIVIST_ID), hook }}
 }
+#[derive(Clone, Debug)]
+pub struct EventCall {
+    pub flag: EventFlag,
+    pub hook: Hook,
+}
 
 #[derive(Clone, Component, Debug, Default)]
 pub struct LuaQueue {
     pub calls: Vec<HookCall>,
+}
+#[derive(Clone, Debug, Default, Resource)]
+pub struct LuaEventQueue {
+    pub calls: Vec<EventCall>,
 }
 
 pub struct LuaInstance {
@@ -97,7 +108,7 @@ pub struct SharedInstances {
     pub by_path:      HashMap<String, HashMap<Entity, u32>>,
     pub instances:    HashMap<u32, LuaInstance>,
     pub shared:       HashMap<Handle<LuaScript>, u32>,
-    pub updateables:  HashSet<u32>,
+    pub event_flags:  HashMap<u32, EventFlag>,
 }
 impl SharedInstances {
     pub const COLLECTIVIST_ID: u32 = 0;
@@ -105,6 +116,10 @@ impl SharedInstances {
     pub fn gen_next_id(&mut self) -> u32 {
         self.next_id += 1;
         self.next_id - 1
+    }
+
+    pub fn has_event_flags(&self, flags: EventFlag, script_id: u32) -> bool {
+        self.event_flags.get(&script_id).map(|i| *i).unwrap_or(EventFlag::empty()).contains(flags)
     }
 }
 impl Default for SharedInstances {
@@ -119,7 +134,7 @@ impl Default for SharedInstances {
             shared: HashMap::new(),
             instances: HashMap::new(),
             by_path: HashMap::new(),
-            updateables: HashSet::new(),
+            event_flags: HashMap::new(),
         }
     }
 }
@@ -142,7 +157,7 @@ pub fn send_on_update(
     let hook = Hook { name: ON_UPDATE.into(), args: (lua_time.clone(),).into() };
 
     for (mut queue, refs) in query.iter_mut() {
-        if refs.ids.intersection(&shared_instances.updateables).next().is_some() {
+        if refs.ids.iter().any(|i| shared_instances.has_event_flags(EventFlag::ON_UPDATE, *i)) {
             queue.calls.push(HookCall::next_frame(hook.clone()));
         }
     }
@@ -279,26 +294,55 @@ pub fn update_script_queue(
         queue.calls.retain(|HookCall { hook, script_ids }| {
             if script_ids.is_empty() || script_ids.iter().all(|i| *i == SharedInstances::COLLECTIVIST_ID || si.instances.contains_key(i)) {
                 for id in script_ref.ids.iter() {
-                    let is_updateable = {
-                        let lua_inst = si.instances.get(id).unwrap();
-                        if let Ok(inst_ref) = &lua_inst.result {
-                            let _ = hook.exec(&inst_ref.lock, entity.into()).map_err(|e| {
-                                hook.log_err(e);
-                            });
-                            if *id != SharedInstances::COLLECTIVIST_ID && hook.name.as_str() == ON_INIT {
+                    let lua_inst = si.instances.get(id).unwrap();
+                    if let Ok(inst_ref) = &lua_inst.result {
+                        let _ = hook.exec(&inst_ref.lock, entity.into()).map_err(|e| {
+                            hook.log_err(e);
+                        });
+                        if *id != SharedInstances::COLLECTIVIST_ID && hook.name.as_str() == ON_INIT {
+                            let mut events = EventFlag::empty();
+                            if (|| {
                                 let r = inst_ref.lock.read();
-                                let res = r.globals().contains_key(ON_UPDATE);
-                                res.unwrap_or(false)
-                            } else { false }
-                        } else { false }
-                    };
-                    if is_updateable {
-                        si.updateables.insert(*id);
+                                let globals = r.globals();
+                                if globals.contains_key(ON_UPDATE)? {
+                                    events |= EventFlag::ON_UPDATE;
+                                }
+                                if globals.contains_key(ON_ROOM_REVEAL)? {
+                                    events |= EventFlag::ON_ROOM_REVEAL;
+                                }
+                                Ok(())
+                            })().map_err(|e: mlua::Error| {
+                                error!("Failed to get EventFlags for script {}: {}", *id, e);
+                            }).is_ok() {
+                                si.event_flags.insert(*id, events);
+                            }
+                        }
                     }
                 }
                 false
             } else { true }
         });
+    }
+}
+
+pub fn update_script_event_queue(
+    mut lua_event_queue: ResMut<LuaEventQueue>,
+    si:                  ResMut<SharedInstances>,
+    query:               Query<(Entity, &ScriptRefs), >,
+) {
+    for EventCall { flag, hook } in lua_event_queue.calls.drain(..) {
+        for (entity, script_ref) in query.iter() {
+            for id in script_ref.ids.iter() {
+                if si.has_event_flags(flag, *id) {
+                    let lua_inst = si.instances.get(id).unwrap();
+                    if let Ok(inst_ref) = &lua_inst.result {
+                        let _ = hook.exec(&inst_ref.lock, entity.into()).map_err(|e| {
+                            hook.log_err(e);
+                        });
+                    }
+                }
+            }
+        }
     }
 }
 

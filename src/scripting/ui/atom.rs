@@ -100,6 +100,14 @@ impl LuaAtomRegistry {
     pub fn _peek(&mut self, atom_ref: LuaAtomRef) -> TransVar {
         self.atoms[atom_ref.index].last_eval.clone()
     }
+
+    pub fn set<V>(&mut self, atom_ref: LuaAtomRef, v: V) where V: Into<TransVar> {
+        let trans_var: TransVar = v.into();
+        let atom = &mut self.atoms[atom_ref.index];
+        atom.acknowledged = false;
+        atom.is_last_rust_eval = true;
+        atom.last_eval = trans_var.clone();
+    }
 }
 
 #[derive(Debug)]
@@ -110,6 +118,8 @@ pub struct LuaAtom {
     last_eval:    TransVar,
     /// bool marking if the last change to this has been acknowledged (and not just read)
     acknowledged: bool,
+    /// bool marking if the last_eval was updated rust side. If so, we'll update the lua value too.
+    is_last_rust_eval: bool,
 }
 impl LuaMod for LuaAtom {
     fn mod_name() -> &'static str { "Atom" }
@@ -124,7 +134,7 @@ impl LuaMod for LuaAtom {
             let mut w   = world.write();
             let mut reg = w.resource_mut::<LuaAtomRegistry>();
             let index   = reg.atoms.len();
-            reg.atoms.push(LuaAtom { key, last_eval, acknowledged });
+            reg.atoms.push(LuaAtom { key, last_eval, acknowledged, is_last_rust_eval: false });
             Ok(LuaAtomRef { index })
         })?)?;
         Ok(())
@@ -139,10 +149,19 @@ impl LuaAtomRef {
     pub fn index(&self) -> usize { self.index }
 
     pub fn get<'a>(&self, lua: &'a Lua) -> Result<LuaValue<'a>, mlua::Error> {
-        let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
-        let w     = world.read();
-        let reg   = w.resource::<LuaAtomRegistry>();
-        lua.registry_value(&reg.atoms[self.index].key)
+        let world   = lua.globals().get::<_, LuaWorld>("world").unwrap();
+        let mut w   = world.write();
+        let mut reg = w.resource_mut::<LuaAtomRegistry>();
+
+        let should_update = reg.atoms[self.index].is_last_rust_eval;
+        if should_update {
+            reg.atoms[self.index].is_last_rust_eval = false;
+            let key = &reg.atoms[self.index].key;
+            lua.replace_registry_value(key, reg.atoms[self.index].last_eval.clone())?;
+            reg.atoms[self.index].last_eval.clone().to_lua(lua)
+        } else {
+            lua.registry_value(&reg.atoms[self.index].key)
+        }
     }
 
     pub fn set<'a>(&self, lua: &'a Lua, val: LuaValue) -> Result<LuaValue<'a>, mlua::Error> {
@@ -152,6 +171,7 @@ impl LuaAtomRef {
         let last_eval = mem::replace(&mut reg.atoms[self.index].last_eval, TransVar::from_lua(val, lua)?);
         
         reg.atoms[self.index].acknowledged = false;
+        reg.atoms[self.index].is_last_rust_eval = false;
         last_eval.to_lua(lua)
     }
 
@@ -161,11 +181,14 @@ impl LuaAtomRef {
         let mut reg = w.resource_mut::<LuaAtomRegistry>();
 
         let key = &reg.atoms[self.index].key;
-        let val: LuaValue = lua.registry_value(key)?;
+        let val: LuaValue = if reg.atoms[self.index].is_last_rust_eval {
+            reg.atoms[self.index].last_eval.clone().to_lua(lua)?
+        } else { lua.registry_value(key)? };
         let val: LuaValue = f.call(val)?;
         lua.replace_registry_value(key, val.clone())?;
         reg.atoms[self.index].last_eval = TransVar::from_lua(val, lua)?;
         reg.atoms[self.index].acknowledged = false;
+        reg.atoms[self.index].is_last_rust_eval = false;
         Ok(())
     }
 }
@@ -200,10 +223,10 @@ impl<T> OrAtom<T> {
 }
 impl<'lua, T> FromLua<'lua> for OrAtom<T> where T: FromLua<'lua> {
     fn from_lua(v: LuaValue<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
-        if let Some(a) = T::from_lua(v.clone(), lua).ok() {
-            Ok(OrAtom::Val(a))
-        } else if let Some(b) = LuaAtomRef::from_lua(v.clone(), lua).ok() {
+        if let Some(b) = LuaAtomRef::from_lua(v.clone(), lua).ok() {
             Ok(OrAtom::Atom(b))
+        } else if let Some(a) = T::from_lua(v.clone(), lua).ok() {
+            Ok(OrAtom::Val(a))
         } else {
             Err(LuaError::RuntimeError(format!("Failed OrAtom conversion")))
         }

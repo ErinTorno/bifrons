@@ -12,7 +12,6 @@
     player_spawn: [
         (room: "foyer", grid: "main", pos: (5, 5)),
     ],
-    skybox:     "skybox/space.ktx2",
     materials: {
         // implicit "background" material that is a fill of the current background
         "floor": (

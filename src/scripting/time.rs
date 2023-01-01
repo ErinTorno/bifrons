@@ -20,17 +20,18 @@ impl LuaUserData for LuaTime {
     }
 
     fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
-        methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(format!("#time{{delta = {}, elapsed = {}}}", this.delta, this.elapsed)));
+        methods.add_meta_method(LuaMetaMethod::Eq, |_, this, that: LuaTime| Ok(this == &that));
+        methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(format!("time{{delta = {}, elapsed = {}}}", this.delta, this.elapsed)));
     }
 }
 impl LuaMod for LuaTime {
     fn mod_name() -> &'static str { "Time" }
     fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
         table.set("elapsed", lua.create_function(|ctx, ()| {
-                match ctx.globals().get::<_, LuaWorld>("world").unwrap().read().get_resource::<Time>() {
-                    Some(t) => Ok(Some(t.elapsed_seconds_f64())),
-                    None => Ok(None)
-                }
+                let world = ctx.globals().get::<_, LuaWorld>("world").unwrap();
+                let w     = world.read();
+                let time  = w.resource::<Time>();
+                Ok(time.elapsed_seconds_f64())
             })?
         )?;
         Ok(())

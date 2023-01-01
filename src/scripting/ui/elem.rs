@@ -13,7 +13,6 @@ use super::{atom::OrAtom, text::TextBuilder};
 #[derive(Clone, Debug, Default, Resource)]
 pub struct VisibleContainers(pub HashSet<HandleId>);
 
-
 #[derive(Clone, Debug)]
 pub struct TextInst {
     pub id:      u64,
@@ -40,6 +39,10 @@ pub enum ElemKind {
     Button {
         text: OrAtom<TextInst>,
     },
+    Hyperlink {
+        url:       OrAtom<String>,
+        text:      Option<OrAtom<TextInst>>,
+    },
     ImageButton {
         color:     OrAtom<DynColor>,
         is_framed: OrAtom<bool>,
@@ -52,14 +55,24 @@ pub enum ElemKind {
         children: IndexMap<OrAtom<String>, Vec<Elem>>,
     },
     SidePanel {
-        name:     String,
+        id:       egui::Id,
         side:     Side,
         children: Vec<Elem>,
     },
     VerticalPanel {
-        name:     String,
+        id:       egui::Id,
         side:     TopBottomSide,
         children: Vec<Elem>,
+    },
+    Window {
+        id:           egui::Id,
+        title:        Option<OrAtom<TextInst>>,
+        is_closeable: OrAtom<bool>,
+        is_open:      OrAtom<bool>,
+        is_resizable: OrAtom<bool>,
+        has_scrollx:  OrAtom<bool>,
+        has_scrolly:  OrAtom<bool>,
+        children:     Vec<Elem>,
     },
 }
 
@@ -124,6 +137,14 @@ fn process_elem(lua: &Lua, table: LuaTable) -> Result<Elem, mlua::Error> {
                 });
                 ElemKind::Button { text }
             },
+            "hyperlink" => {
+                let text = table.get::<_, Option<OrAtom<TextBuilder>>>("text")?.map(|atom| atom.map(|builder| TextInst {
+                    builder,
+                    id: NEXT_ELEM_ID.fetch_add(1, Ordering::Acquire),
+                }));
+                let url = table.get("url")?;
+                ElemKind::Hyperlink { url, text }
+            },
             "imagebutton" => {
                 let image = match table.get::<_, OrAtom<LuaHandle>>("image")? {
                     OrAtom::Val(i)  => OrAtom::Val(i.try_image()?),
@@ -174,9 +195,9 @@ fn process_elem(lua: &Lua, table: LuaTable) -> Result<Elem, mlua::Error> {
                         },
                     }
                 } else { Side::Left };
-                let name = format!("__sp#{}", NEXT_ELEM_ID.fetch_add(1, Ordering::Acquire));
+                let id = egui::Id::new(NEXT_ELEM_ID.fetch_add(1, Ordering::Acquire));
                 let children = process_children(lua, table)?;
-                ElemKind::SidePanel { name, side, children }
+                ElemKind::SidePanel { id, side, children }
             },
             "verticalpanel" => {
                 let side = if let Some(side) = table.get::<_, Option<String>>("anchor")? {
@@ -188,9 +209,24 @@ fn process_elem(lua: &Lua, table: LuaTable) -> Result<Elem, mlua::Error> {
                         },
                     }
                 } else { TopBottomSide::Top };
-                let name = format!("__vp#{}", NEXT_ELEM_ID.fetch_add(1, Ordering::Acquire));
+                let id = egui::Id::new(NEXT_ELEM_ID.fetch_add(1, Ordering::Acquire));
                 let children = process_children(lua, table)?;
-                ElemKind::VerticalPanel { name, side, children }
+                ElemKind::VerticalPanel { id, side, children }
+            },
+            "window" => {
+                let title = table.get::<_, Option<OrAtom<TextBuilder>>>("title")?.map(|atom| atom.map(|builder| TextInst {
+                    builder,
+                    id: NEXT_ELEM_ID.fetch_add(1, Ordering::Acquire),
+                }));
+                let is_closeable = table.get::<_, Option<OrAtom<bool>>>("is_closeable")?.unwrap_or(OrAtom::Val(false));
+                let is_open      = table.get::<_, Option<OrAtom<bool>>>("is_open")?.unwrap_or(OrAtom::Val(true));
+                let is_resizable = table.get::<_, Option<OrAtom<bool>>>("is_resizable")?.unwrap_or(OrAtom::Val(false));
+                let has_scrollx  = table.get::<_, Option<OrAtom<bool>>>("has_scrollx")?.unwrap_or(OrAtom::Val(false));
+                let has_scrolly  = table.get::<_, Option<OrAtom<bool>>>("has_scrolly")?.unwrap_or(OrAtom::Val(false));
+
+                let id = egui::Id::new(NEXT_ELEM_ID.fetch_add(1, Ordering::Acquire));
+                let children = process_children(lua, table)?;
+                ElemKind::Window { id, title, is_closeable, is_open, is_resizable, has_scrollx, has_scrolly, children }
             },
             _ => {
                 return Err(mlua::Error::RuntimeError(format!("unknown elem table kind {}", k)));
@@ -234,6 +270,10 @@ impl LuaMod for UIAPI {
             table.set("kind", "button")?;
             Ok(table)
         })?)?;
+        table.set("hyperlink", lua.create_function(|_, table: LuaTable| {
+            table.set("kind", "hyperlink")?;
+            Ok(table)
+        })?)?;
         table.set("imagebutton", lua.create_function(|_, table: LuaTable| {
             table.set("kind", "imagebutton")?;
             Ok(table)
@@ -269,6 +309,10 @@ impl LuaMod for UIAPI {
         })?)?;
         table.set("verticalpanel", lua.create_function(|_, table: LuaTable| {
             table.set("kind", "verticalpanel")?;
+            Ok(table)
+        })?)?;
+        table.set("window", lua.create_function(|_, table: LuaTable| {
+            table.set("kind", "window")?;
             Ok(table)
         })?)?;
 
