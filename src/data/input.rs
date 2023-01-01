@@ -38,6 +38,7 @@ pub enum InputData {
     Directional { state: f32, angle: f32 },
     VecChain    { vecs: Vec<Timestamped<Vec2>> },
 }
+#[allow(dead_code)]
 impl InputData {
     pub fn is_empty(&self) -> bool {
         match self {
@@ -256,6 +257,7 @@ pub enum CameraType {
     Locked,    // no free roam or follow-the-player; cutscenes etc.
 }
 impl CameraType {
+    #[allow(dead_code)]
     pub fn toggle(self) -> Self {
         match self {
             CameraType::Free      => CameraType::Following,

@@ -1,4 +1,4 @@
-use std::{hash::Hash, collections::HashSet};
+use std::{hash::Hash, collections::{HashSet, HashMap}};
 
 pub trait Singleton {
     type Item;
@@ -25,3 +25,12 @@ impl<T> Singleton for bevy::utils::HashSet<T> where T: Eq + Hash {
         hs
     }
 }
+
+impl<K, V> Singleton for std::collections::HashMap<K, V> where K: Eq + Hash {
+    type Item = (K, V);
+    fn singleton(item: Self::Item) -> Self {
+        let mut hm = HashMap::new();
+        hm.insert(item.0, item.1);
+        hm
+    }
+} 

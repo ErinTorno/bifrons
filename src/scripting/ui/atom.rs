@@ -21,7 +21,7 @@ pub struct LuaAtomRegistry {
 }
 impl LuaAtomRegistry {
     /// Views the current atom state, acknowledging changes as viewed if it isn't already
-    pub fn acknowledge(&mut self, atom_ref: LuaAtomRef) -> TransVar {
+    pub fn _acknowledge(&mut self, atom_ref: LuaAtomRef) -> TransVar {
         let atom = &mut self.atoms[atom_ref.index];
         atom.acknowledged = true;
         atom.last_eval.clone()
@@ -97,7 +97,7 @@ impl LuaAtomRegistry {
     }
 
     /// Views the current atom state without acknowledging it
-    pub fn peek(&mut self, atom_ref: LuaAtomRef) -> TransVar {
+    pub fn _peek(&mut self, atom_ref: LuaAtomRef) -> TransVar {
         self.atoms[atom_ref.index].last_eval.clone()
     }
 }

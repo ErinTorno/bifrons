@@ -17,6 +17,7 @@ impl Default for LineDictionary {
         LineDictionary { lines: default(), current: ENGLISH.to_string() }
     }
 }
+#[allow(dead_code)]
 impl LineDictionary {
     pub fn merge<S>(&mut self, lang: S, lines: &Lines) where S: AsRef<str> {
         if !self.lines.contains_key(lang.as_ref()) {

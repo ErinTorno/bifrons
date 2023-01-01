@@ -10,7 +10,7 @@ use mlua::prelude::*;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 
-use crate::data::lua::{LuaScript, LuaScriptLoader, InstanceKind, InstanceRef, Hook, LuaWorld, Recipient, ScriptVar, LuaScriptVars};
+use crate::data::lua::{LuaScript, LuaScriptLoader, InstanceKind, InstanceRef, Hook, LuaWorld, ScriptVar, LuaScriptVars};
 use crate::scripting::bevy_api::handle::{LuaAssetEventRegistry, AssetEventKey};
 use crate::scripting::event::{constants, ON_UPDATE, ON_INIT};
 use crate::scripting::register_lua_mods;
@@ -107,24 +107,9 @@ impl SharedInstances {
         self.next_id - 1
     }
 }
-impl SharedInstances {
-    pub fn foreach<F>(rec: &Recipient, f: F) where F: Fn(&Lua) -> Result<(), LuaError> {
-        match rec {
-            Recipient::Entity(e) => {
-
-            },
-            Recipient::Everyone => {
-
-            },
-            Recipient::NoOne => (),
-            Recipient::Script(name) => (),
-        }
-    }
-}
 impl Default for SharedInstances {
     fn default() -> Self {
         let collectivist = Lua::new();
-        register_lua_mods(&collectivist).unwrap();
         collectivist.globals().set("script_id", SharedInstances::COLLECTIVIST_ID).unwrap();
         // todo register world
         let collectivist = RwLock::new(collectivist).into();
@@ -163,12 +148,17 @@ pub fn send_on_update(
     }
 }
 
-pub fn load_script(script: &LuaScript, world: LuaWorld, id: u32) -> Result<InstanceRef, LuaError> {
-    let lua = Lua::new();
+pub fn load_script_on_lua(lua: &Lua, script: &LuaScript, world: LuaWorld, id: u32) -> Result<(), LuaError> {
     lua.globals().set("world", world)?;
     register_lua_mods(&lua)?;
     lua.globals().set("script_id", id)?;
     lua.load(&script.source).exec()?;
+    Ok(())
+}
+
+pub fn load_script(script: &LuaScript, world: LuaWorld, id: u32) -> Result<InstanceRef, LuaError> {
+    let lua = Lua::new();
+    load_script_on_lua(&lua, script, world, id)?;
     Ok(RwLock::new(lua).into())
 }
 
@@ -179,11 +169,12 @@ pub fn init_lua_script(
         Res<AssetServer>,
         ResMut<SharedInstances>,
         Res<Assets<LuaScript>>,
+        Local<bool>,
         Query<(Entity, &mut ToInitScripts, Option<&mut ScriptRefs>, Option<&mut LuaQueue>)>,
     )>,
 ) {
     let lua_world = unsafe { LuaWorld::new(world) };
-    let (mut commands, asset_server, mut instances, lua_scripts, mut query) = state.get_mut(world);
+    let (mut commands, asset_server, mut instances, lua_scripts, mut is_collectivist_empty, mut query) = state.get_mut(world);
     'query: for (entity, to_init, script_refs, lua_queue) in query.iter_mut() {
         let mut scripts = HashMap::new();
         for (id, handle) in to_init.handles.iter() {
@@ -246,9 +237,17 @@ pub fn init_lua_script(
                     let path = get_path(&asset_server, handle);
                     {
                         let w = instances.collectivist.lock.write();
-                        let _ = w.load(&script.source).exec().map_err(|err| {
-                            error!("Failed to load {}: {}", path, err);
-                        });
+                        if *is_collectivist_empty {
+                            let _ = load_script_on_lua(&w, script, lua_world.clone(), SharedInstances::COLLECTIVIST_ID).map_err(|err| {
+                                error!("Failed to load {}: {}", path, err);
+                            });
+
+                            *is_collectivist_empty = false;
+                        } else {
+                            let _ = w.load(&script.source).exec().map_err(|err| {
+                                error!("Failed to load {}: {}", path, err);
+                            });
+                        }
                     }
                     instances.by_path.entry(path.clone())
                         .or_insert_with(|| HashMap::new())

@@ -4,7 +4,7 @@ use bevy::{prelude::*, asset::{LoadContext, AssetLoader, LoadedAsset}, utils::Bo
 use mlua::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::{scripting::{LuaMod, random::random_range, bevy_api::handle::LuaHandle}, system::common::fix_missing_extension, util::serialize::ron_options};
+use crate::{scripting::{LuaMod, random::random_range, bevy_api::handle::LuaHandle}, system::common::fix_missing_extension, util::ron_options};
 
 use super::lua::{LuaWorld, LuaScriptVars};
 

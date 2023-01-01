@@ -1,7 +1,7 @@
 use bevy::{asset::*, prelude::*, reflect::TypeUuid, utils::{HashMap, HashSet}};
 use serde::{Deserialize, Serialize};
 
-use crate::util::serialize::ron_options;
+use crate::util::ron_options;
 
 use super::{anim::Animation, lang::Lines, item::Item, stat::Attributes, lua::LuaScriptVars};
 

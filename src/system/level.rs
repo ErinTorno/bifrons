@@ -258,7 +258,6 @@ pub fn spawn_room(
                             TransformBundle {
                                 local: Transform::from_translation(match prefab.at {
                                     PrefabLocation::Free(v) => v,
-                                    _ => { unimplemented!() },
                                 }).with_rotation(Quat::from_euler(EulerRot::XYZ, prefab.rotation.x, prefab.rotation.y, prefab.rotation.z)),
                                 ..default()
                             },

@@ -1,8 +1,15 @@
+use std::cmp::Ordering;
+
 use bevy::{prelude::{Color, Component}, ecs::system::EntityCommands};
 use bevy_inspector_egui::prelude::*;
+use ron::{Options, extensions::Extensions};
+
+pub fn ron_options() -> Options {
+    Options::default().with_default_extension(Extensions::all())
+}
 
 pub mod collections;
-pub mod serialize;
+
 pub trait IntoHex {
     fn into_hex(&self) -> String;
 }
@@ -40,36 +47,88 @@ impl<'w, 's, 'a> InsertableWithPredicate for EntityCommands<'w, 's, 'a> {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct Roughly<T>(pub T);
+
+impl<T> Eq for Roughly<T> where T: Clone + RoughlyEq<T> {
+}
+impl<T> PartialEq for Roughly<T> where T: Clone + RoughlyEq<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.roughly_eq(&other.0)
+    }
+}
+impl<T> Ord for Roughly<T> where T: Clone + PartialOrd + RoughlyEq<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let this = &self.0;
+        let that = &other.0;
+        if this.roughly_eq(that) {
+            Ordering::Equal
+        } else if this < that {
+            Ordering::Less
+        } else if this > that {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
+        }
+    }
+}
+impl<T> PartialOrd for Roughly<T> where T: Clone + PartialOrd + RoughlyEq<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        let this = &self.0;
+        let that = &other.0;
+        if this.roughly_eq(that) {
+            Some(Ordering::Equal)
+        } else {
+            this.partial_cmp(&that)
+        }
+    }
+}
+
 pub trait RoughlyEq<T> {
     type Epsilon;
-    fn roughly_eq(self, that: T, epsilon: Self::Epsilon) -> bool;
+
+    fn default_epsilon() -> Self::Epsilon;
+
+    fn roughly_eq_within(&self, that: &T, epsilon: Self::Epsilon) -> bool;
+
+    fn roughly_eq(&self, that: &T) -> bool {
+        self.roughly_eq_within(that, Self::default_epsilon())
+    }
 }
 impl RoughlyEq<f32> for f32 {
     type Epsilon = f32;
 
-    fn roughly_eq(self, that: f32, epsilon: Self::Epsilon) -> bool {
-        self >= that - epsilon && self <= that + epsilon
+    fn default_epsilon() -> Self::Epsilon { 0.000001 }
+
+    fn roughly_eq_within(&self, that: &f32, epsilon: Self::Epsilon) -> bool {
+        *self >= *that - epsilon && *self <= *that + epsilon
     }
 }
 impl RoughlyEq<f64> for f32 {
     type Epsilon = f64;
 
-    fn roughly_eq(self, that: f64, epsilon: Self::Epsilon) -> bool {
-        self as f64 >= that - epsilon && self as f64 <= that + epsilon
+    fn default_epsilon() -> Self::Epsilon { 0.000001 }
+
+    fn roughly_eq_within(&self, that: &f64, epsilon: Self::Epsilon) -> bool {
+        *self as f64 >= *that - epsilon && *self as f64 <= *that + epsilon
     }
 }
 impl RoughlyEq<f64> for f64 {
     type Epsilon = f64;
 
-    fn roughly_eq(self, that: f64, epsilon: Self::Epsilon) -> bool {
-        self >= that - epsilon && self <= that + epsilon
+    fn default_epsilon() -> Self::Epsilon { 0.000001 }
+
+    fn roughly_eq_within(&self, that: &f64, epsilon: Self::Epsilon) -> bool {
+        *self >= *that - epsilon && *self <= *that + epsilon
     }
 }
 impl RoughlyEq<f32> for f64 {
     type Epsilon = f64;
 
-    fn roughly_eq(self, that: f32, epsilon: Self::Epsilon) -> bool {
-        self >= that as f64 - epsilon && self <= that as f64 + epsilon
+    fn default_epsilon() -> Self::Epsilon { 0.000001 }
+
+    fn roughly_eq_within(&self, that: &f32, epsilon: Self::Epsilon) -> bool {
+        *self >= *that as f64 - epsilon && *self <= *that as f64 + epsilon
     }
 }
 pub trait RoughToBits<T> {

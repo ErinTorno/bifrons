@@ -1,7 +1,7 @@
-use bevy::{prelude::*, asset::FileAssetIo};
+use bevy::{prelude::*};
 use mlua::prelude::*;
 
-use crate::{data::{stat::{Stat, Pool}, material::{TextureMaterial,}, input::ActionState, formlist::{FormList, InjectCommands}, geometry::{Light, LightAnim, LightKind}, lua::{ScriptVar}, palette::{Palette, DynColor}}};
+use crate::{data::{stat::{Stat, Pool}, material::{TextureMaterial,}, input::ActionState, formlist::{FormList, InjectCommands}, geometry::{Light, LightAnim, LightKind}, lua::{ScriptVar, LuaWorld}, palette::{Palette, DynColor}, assetio::VirtualFileOverrides}};
 
 use self::{color::RgbaColor, time::LuaTime, entity::{LuaQuery, EntityAPI}, level::LevelAPI, random::RandomAPI, log::LogAPI, bevy_api::{math::{LuaVec2, LuaVec3, MathAPI}, image::ImageAPI}, ui::{elem::{UIAPI}, atom::{LuaAtom}, text::{TextBuilder, TextStyle}, font::UIFont}, file::FileAPI};
 
@@ -67,10 +67,14 @@ pub fn init_luamod<T>(lua: &Lua) -> Result<(), mlua::Error> where T: LuaMod {
 // Default API
 
 fn attach_prelude_lua(lua: &Lua) -> Result<(), mlua::Error> {
-    let mut buf = FileAssetIo::get_base_path();
-    buf.push("assets");
-    let package: LuaTable = lua.globals().get("package")?;
-    package.set("path", format!("{}/?.lua", buf.as_os_str().to_string_lossy()))?;
+    {
+        let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
+        let read = world.read();
+        let vfo = read.resource::<VirtualFileOverrides>();
+        
+        let package: LuaTable = lua.globals().get("package")?;
+        package.set("path", vfo.lua_path.as_str())?;
+    }
 
     lua.globals().set("format", lua.create_function(|_lua, values: LuaMultiValue| {
         format_lua(values)

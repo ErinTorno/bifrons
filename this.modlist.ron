@@ -1,0 +1,12 @@
+(
+    entries: [
+        (
+            file: "assets/core.mod.ron",
+            settings: {},
+        ),
+        (
+            file: "mods/editor/editor.mod.ron",
+            settings: {},
+        ),
+    ],
+)

@@ -326,6 +326,7 @@ pub struct AnimationState {
     pub flat_skeleton:   HashMap<String, Entity>,
 }
 
+#[allow(dead_code)]
 impl AnimationState {
     pub fn new(anim: &Animation, animname: &String, flat_skeleton: HashMap<String, Entity>) -> AnimationState {
         let mut st = AnimationState {

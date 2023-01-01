@@ -3,14 +3,14 @@ use std::collections::{HashMap, HashSet};
 use bevy::{prelude::*, utils::BoxedFuture, asset::*, reflect::TypeUuid};
 use serde::{Deserialize, Serialize};
 
-use crate::util::serialize::ron_options;
+use crate::util::ron_options;
 
-use super::{geometry::{Geometry, Light}, material::TextureMaterial, grid::CellID, stat::Attributes, lua::LuaScriptVars};
+use super::{geometry::{Geometry, Light}, material::TextureMaterial, stat::Attributes, lua::LuaScriptVars};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum PrefabLocation {
     Free(Vec3),
-    Cell(CellID),
+    // Cell(CellID),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

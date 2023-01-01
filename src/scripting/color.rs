@@ -85,13 +85,15 @@ impl Eq for RgbaColor {}
 impl RoughlyEq<RgbaColor> for RgbaColor {
     type Epsilon = f32;
 
-    fn roughly_eq(self, that: RgbaColor, epsilon: Self::Epsilon) -> bool {
+    fn default_epsilon() -> Self::Epsilon { 0.0001 }
+
+    fn roughly_eq_within(&self, that: &RgbaColor, epsilon: Self::Epsilon) -> bool {
         let this = self;
         let that = if self.is_linear { that.as_linear() } else { that.as_srgb() };
-        this.r.roughly_eq(that.r, epsilon) &&
-        this.g.roughly_eq(that.g, epsilon) &&
-        this.b.roughly_eq(that.b, epsilon) &&
-        this.a.roughly_eq(that.a, epsilon)
+        this.r.roughly_eq_within(&that.r, epsilon) &&
+        this.g.roughly_eq_within(&that.g, epsilon) &&
+        this.b.roughly_eq_within(&that.b, epsilon) &&
+        this.a.roughly_eq_within(&that.a, epsilon)
     }
 }
 impl Hash for RgbaColor {
@@ -199,7 +201,7 @@ impl LuaUserData for RgbaColor {
         }));
         methods.add_method("linear", |_, this, ()| Ok(this.as_linear()));
         methods.add_method("srgb", |_, this, ()| Ok(this.as_srgb()));
-        methods.add_meta_method(LuaMetaMethod::Eq, |_, this, that: RgbaColor| Ok(this.roughly_eq(that, 0.0000001)));
+        methods.add_meta_method(LuaMetaMethod::Eq, |_, this, that: RgbaColor| Ok(this.roughly_eq_within(&that, 0.0000001)));
         methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(this.lua_to_string()));
     }
 }

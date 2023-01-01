@@ -1,0 +1,16 @@
+(
+    version:      (0,1,0),
+    priority:     -100.,
+    dependencies: {
+        "core": Any,
+    },
+    lines: {
+        "english": {
+            "name": "Lemegeton editor tabularum",
+            "desc": "A tool of forbidden knowledge (level editing).",
+        },
+    },
+    startup_scripts: [
+        "editor/main.lua",
+    ],
+)

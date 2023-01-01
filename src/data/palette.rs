@@ -17,7 +17,7 @@ use crate::system::common::{fix_missing_extension};
 use crate::system::lua::SharedInstances;
 use crate::system::palette::LoadingPalette;
 use crate::util::{IntoHex, RoughlyEq};
-use crate::util::serialize::ron_options;
+use crate::util::ron_options;
 
 use super::lua::{ManyTransVars, LuaWorld, LuaReadable, InstanceRef, Any3, TransVar};
 
@@ -120,15 +120,17 @@ impl Serialize for DynColor {
         serializer.serialize_str(s.as_str())
     }
 }
-impl RoughlyEq<&DynColor> for &DynColor {
+impl RoughlyEq<DynColor> for &DynColor {
     type Epsilon = f32;
 
-    fn roughly_eq(self, that: &DynColor, epsilon: Self::Epsilon) -> bool {
+    fn default_epsilon() -> Self::Epsilon { 0.0001 }
+
+    fn roughly_eq_within(&self, that: &DynColor, epsilon: Self::Epsilon) -> bool {
         match (self, that) {
             (DynColor::Background, DynColor::Background) => true,
-            (DynColor::Const(a),  DynColor::Const(b)) => a.roughly_eq(*b, epsilon),
+            (DynColor::Const(a),  DynColor::Const(b)) => a.roughly_eq_within(b, epsilon),
             (DynColor::Named(a),  DynColor::Named(b)) => a == b,
-            (DynColor::Custom(a), DynColor::Custom(b)) => a.roughly_eq(*b, epsilon),
+            (DynColor::Custom(a), DynColor::Custom(b)) => a.roughly_eq_within(b, epsilon),
             _ => false,
         }
     }
@@ -167,7 +169,7 @@ impl LuaUserData for DynColor {
             },
             None         => this.eval_lua_current(lua),
         });
-        methods.add_meta_method(LuaMetaMethod::Eq, |_, this, that: DynColor| Ok(this.roughly_eq(&that, 0.0000001)));
+        methods.add_meta_method(LuaMetaMethod::Eq, |_, this, that: DynColor| Ok(this.roughly_eq_within(&that, 0.0000001)));
         methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(this.lua_to_string()));
     }
 }

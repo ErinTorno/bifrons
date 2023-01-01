@@ -1,7 +1,7 @@
 use bevy::{prelude::*, render::{texture::{ImageSampler}, render_resource::{SamplerDescriptor, FilterMode, Extent3d, TextureDimension, TextureFormat}}, asset::LoadState};
 use bevy_egui::EguiContext;
 
-use crate::data::{material::{TexMatInfo, MaterialColors, MaterialsToInit, TextureMaterial, LoadedMat, resolve_texture_path}};
+use crate::data::{material::{TexMatInfo, MaterialColors, MaterialsToInit, TextureMaterial, LoadedMat}};
 
 use super::ui::UIAssets;
 

@@ -44,9 +44,9 @@ pub struct LuaTimer {
     pub duration: f64,
     pub repeat:   bool,
 }
-impl LuaMod for LuaTimer {
-    fn mod_name() -> &'static str { "Timer" }
-    fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
-        Ok(())
-    }
-}
+// impl LuaMod for LuaTimer {
+//     fn mod_name() -> &'static str { "Timer" }
+//     fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
+//         Ok(())
+//     }
+// }

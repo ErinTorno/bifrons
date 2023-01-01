@@ -1,7 +1,7 @@
-require "ui/editor/tools/common"
-require "ui/editor/tools/move"
-require "ui/editor/tools/grid_toggle"
-require "ui/editor/tools/point_placer"
+require "editor/tools/common"
+require "editor/tools/move"
+require "editor/tools/grid_toggle"
+require "editor/tools/point_placer"
 
 g_editor_handle = nil
 

@@ -1,9 +1,5 @@
-#![enable(implicit_some)]
 (
-    version:      (0,0,1),
-    dependencies: [],
-    load_after:   [],          // def: []
-    load_before:  [],          // def: []
+    version:      (0,1,0),
     priority:     -999999999., // def: 0.0
     lines: {
         "english": {
@@ -11,4 +7,7 @@
             "desc": "The base game loaded from content at the root of ./assets",
         },
     },
+    startup_scripts: [
+        
+    ],
 )

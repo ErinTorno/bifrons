@@ -99,7 +99,7 @@ pub fn update_action_state(
                             InputTS::default()
                         }
                     },
-                    InputCode::Joystick { side, angle, sensitivity } => { todo!() },
+                    InputCode::Joystick { .. } => { todo!() },
                     InputCode::Shoulder(code) => if let Some(id) = action_state.gamepad_id {
                         for event in gamepad_events.iter() {
                             match event.event_type {
@@ -110,15 +110,13 @@ pub fn update_action_state(
                                 _ => (),
                             }
                         }
-                        if let Some(id) = action_state.gamepad_id {
-                            let gamepad = Gamepad { id };
-                            if let Some(axes) = gamepad_axes.get(&gamepad) {
-                                if let Some(state) = axes.get(code) {
-                                    InputTS {
-                                        time: InputTime::Held { secs, secs_start: secs },
-                                        data: InputData::Analog { state: *state },
-                                    }
-                                } else { InputTS::default() }
+                        let gamepad = Gamepad { id };
+                        if let Some(axes) = gamepad_axes.get(&gamepad) {
+                            if let Some(state) = axes.get(code) {
+                                InputTS {
+                                    time: InputTime::Held   { secs, secs_start: secs },
+                                    data: InputData::Analog { state: *state },
+                                }
                             } else { InputTS::default() }
                         } else { InputTS::default() }
                     } else { InputTS::default() },

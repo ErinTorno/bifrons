@@ -1,7 +1,7 @@
 use mlua::prelude::*;
 use std::{default::default};
 
-use crate::{data::lua::{LuaWorld, Recipient, ManyTransVars, ScriptVar, Hook, TransVar}, system::lua::{SharedInstances, LuaQueue, HookCall}};
+use crate::{data::lua::{LuaWorld, Recipient, ManyTransVars, Hook, TransVar}, system::lua::{SharedInstances, LuaQueue, HookCall}};
 
 use super::{ LuaMod, bevy_api::LuaEntity};
 

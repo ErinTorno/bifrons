@@ -1,7 +1,7 @@
 /// Called once when this script is being removed from an Entity or its Entity is removed
 /// *params:* ()
 /// todo! implement
-pub const ON_DROP:        &str = "on_drop";
+pub const _ON_DROP:        &str = "on_drop";
 
 /// Called after the script fully loads and is processed
 /// *params:* (time: Time)
@@ -12,17 +12,17 @@ pub const ON_INIT:        &str = "on_init";
 /// Called when an entity interacts with this script's entity
 /// *params:* (context: {prompts: Entity})
 /// todo! implement
-pub const ON_INTERACT:    &str = "on_interact";
+pub const _ON_INTERACT:    &str = "on_interact";
 
 /// Called when the game's localization language changes
 /// *params:* (context: {prev: String, new: String})
 /// todo! implement
-pub const ON_LANG_CHANGE: &str = "on_lang_change";
+pub const _ON_LANG_CHANGE: &str = "on_lang_change";
 
 /// Called when a save state is being made while this script is active
 /// *params:* (reader: SaveReader)
 /// todo! implement
-pub const ON_LOAD:        &str = "on_load";
+pub const _ON_LOAD:        &str = "on_load";
 
 /// Called when a room is revealed on the map (including at setup for (reveal_before_entry: true))
 /// *params:* (context: {
@@ -34,7 +34,7 @@ pub const ON_ROOM_REVEAL: &str = "on_room_reveal";
 /// Called when a save state is being made while this script is active
 /// *params:* (writer: SaveWriter)
 /// todo! implement
-pub const ON_SAVE:        &str = "on_save";
+pub const _ON_SAVE:        &str = "on_save";
 
 /// Called when this script's entity takes damage from a source
 /// *params:* (context: {
@@ -44,7 +44,7 @@ pub const ON_SAVE:        &str = "on_save";
 ///     tags:        Table<String, Boolean> -- the attack's damage tags 
 /// })
 /// todo! implement, and a way to cancel the damage?
-pub const ON_TAKE_DAMAGE: &str = "on_take_damage";
+pub const _ON_TAKE_DAMAGE: &str = "on_take_damage";
 
 /// Called repeatedly at a fixed timestamp
 /// *params:* ()

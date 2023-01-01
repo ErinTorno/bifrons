@@ -4,6 +4,7 @@ pub mod camera;
 pub mod common;
 pub mod lua;
 pub mod level;
+pub mod module;
 pub mod palette;
 pub mod prefab;
 pub mod scene;

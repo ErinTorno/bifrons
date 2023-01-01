@@ -1,4 +1,4 @@
-require "ui/editor/tools/common"
+require "editor/tools/common"
 
 do
     local name       = "grid_toggle"
