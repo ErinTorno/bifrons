@@ -6,7 +6,7 @@ use egui::{text::LayoutJob, FontFamily, FontId, TextFormat};
 use lazy_static::lazy_static;
 use mlua::prelude::*;
 
-use crate::{scripting::{LuaMod, color::RgbaColor, bevy_api::handle::LuaHandle}, data::{palette::{DynColor, LuaToDynColor}, lua::{Any3, Any2, LuaWorld}}, system::ui::UIAssets, util::RoughToBits};
+use crate::{scripting::{LuaMod, bevy_api::handle::LuaHandle}, data::{palette::{DynColor, LuaToDynColor}, lua::{Any3, Any2, LuaWorld}, rgba::RgbaColor}, system::ui::UIAssets, util::RoughToBits};
 
 use super::font::UIFont;
 
@@ -168,8 +168,7 @@ impl LuaUserData for TextStyle {
     fn add_methods<'lua, M: LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_method("clone", |_, this, ()| Ok(this.clone()));
 
-        methods.add_function_mut("with_background", |_, (this, any): (LuaAnyUserData, Any3<DynColor, RgbaColor, String>)| {
-            let mut this: TextStyle = this.take()?;
+        methods.add_function_mut("with_background", |_, (mut this, any): (TextStyle, Any3<DynColor, RgbaColor, String>)| {
             match any {
                 Any3::A(c) => { this.background = c },
                 Any3::B(c) => { this.background = DynColor::Custom(c) },
@@ -177,8 +176,7 @@ impl LuaUserData for TextStyle {
             }
             Ok(this)
         });
-        methods.add_function_mut("with_color", |_, (this, any): (LuaAnyUserData, Any3<DynColor, RgbaColor, String>)| {
-            let mut this: TextStyle = this.take()?;
+        methods.add_function_mut("with_color", |_, (mut this, any): (TextStyle, Any3<DynColor, RgbaColor, String>)| {
             match any {
                 Any3::A(c) => { this.color = c },
                 Any3::B(c) => { this.color = DynColor::Custom(c) },
@@ -186,33 +184,27 @@ impl LuaUserData for TextStyle {
             }
             Ok(this)
         });
-        methods.add_function_mut("with_font", |lua, (this, any): (LuaAnyUserData, _)| {
-            let mut this: TextStyle = this.take()?;
+        methods.add_function_mut("with_font", |lua, (mut this, any): (TextStyle, _)| {
             this.set_font_family(lua, any)?;
             Ok(this)
         });
-        methods.add_function_mut("with_font_size", |_, (this, font_size): (LuaAnyUserData, _)| {
-            let mut this: TextStyle = this.take()?;
+        methods.add_function_mut("with_font_size", |_, (mut this, font_size): (TextStyle, _)| {
             this.font.size = font_size;
             Ok(this)
         });
-        methods.add_function_mut("with_italics", |_, (this, italics): (LuaAnyUserData, _)| {
-            let mut this: TextStyle = this.take()?;
+        methods.add_function_mut("with_italics", |_, (mut this, italics): (TextStyle, _)| {
             this.italics = italics;
             Ok(this)
         });
-        methods.add_function_mut("with_strikethrough", |_, (this, table): (LuaAnyUserData, _)| {
-            let mut this: TextStyle = this.take()?;
+        methods.add_function_mut("with_strikethrough", |_, (mut this, table): (TextStyle, _)| {
             this.strikethrough = DynStroke::from_table(&table)?;
             Ok(this)
         });
-        methods.add_function_mut("with_underline", |_, (this, table): (LuaAnyUserData, _)| {
-            let mut this: TextStyle = this.take()?;
+        methods.add_function_mut("with_underline", |_, (mut this, table): (TextStyle, _)| {
             this.underline = DynStroke::from_table(&table)?;
             Ok(this)
         });
-        methods.add_function_mut("with_valign", |_, (this, align): (LuaAnyUserData, String)| {
-            let mut this: TextStyle = this.take()?;
+        methods.add_function_mut("with_valign", |_, (mut this, align): (TextStyle, String)| {
             this.valign = match align.as_str() {
                 "bottom" => egui::Align::Max,
                 "center" => egui::Align::Center,
@@ -318,8 +310,7 @@ impl LuaUserData for TextBuilder {
     fn add_methods<'lua, M: LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_method("clone", |_, this, ()| Ok(this.clone()));
 
-        methods.add_function_mut("push", |_, (this, str): (LuaAnyUserData, String)| {
-            let mut this: TextBuilder = this.take()?;
+        methods.add_function_mut("push", |_, (mut this, str): (TextBuilder, String)| {
             this.current.text.push_str(str.as_str());
             if this.current.leading_space >= 0. {
                 this.sections.push(this.current.clone());
@@ -328,8 +319,7 @@ impl LuaUserData for TextBuilder {
             }
             Ok(this)
         });
-        methods.add_function_mut("indent", |_, (this, indent): (LuaAnyUserData, f32)| {
-            let mut this: TextBuilder = this.take()?;
+        methods.add_function_mut("indent", |_, (mut this, indent): (TextBuilder, f32)| {
             if !this.current.text.is_empty() {
                 this.sections.push(this.current.clone());
                 this.current.text = String::new();
@@ -337,9 +327,7 @@ impl LuaUserData for TextBuilder {
             this.current.leading_space += indent;
             Ok(this)
         });
-        methods.add_function_mut("style", |_, (this, style): (LuaAnyUserData, _)| {
-            let mut this: TextBuilder = this.take()?;
-            
+        methods.add_function_mut("style", |_, (mut this, style): (TextBuilder, _)| {
             if !this.current.text.is_empty() {
                 this.sections.push(this.current);
                 this.current = TextSection { style, ..default() };

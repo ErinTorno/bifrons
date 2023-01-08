@@ -1,47 +1,9 @@
-use std::collections::HashMap;
-
 use bevy::{prelude::*, reflect::*};
 use mlua::prelude::*;
 
-use crate::data::{prefab::Tags, lua::LuaWorld};
+use crate::data::{lua::LuaWorld};
 
 use super::{LuaMod, bevy_api::LuaEntity};
-
-#[derive(Default)]
-pub struct EntityAPI;
-impl LuaMod for EntityAPI {
-    fn mod_name() -> &'static str { "Entity" }
-    fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
-        table.set("hide", lua.create_function(|lua, entity: LuaEntity| {
-            if let Some(mut ent_mut) = lua.globals().get::<_, LuaWorld>("world").unwrap().write().get_entity_mut(entity.0) {
-                ent_mut.insert(Visibility { is_visible: false });
-            }
-            Ok(())
-        })?)?;
-        table.set("set_visible", lua.create_function(|lua, (entity, is_visible): (LuaEntity, bool)| {
-            if let Some(mut ent_mut) = lua.globals().get::<_, LuaWorld>("world").unwrap().write().get_entity_mut(entity.0) {
-                ent_mut.insert(Visibility { is_visible });
-            }
-            Ok(())
-        })?)?;
-        table.set("show", lua.create_function(|lua, entity: LuaEntity| {
-            if let Some(mut ent_mut) = lua.globals().get::<_, LuaWorld>("world").unwrap().write().get_entity_mut(entity.0) {
-                ent_mut.insert(Visibility { is_visible: true });
-            }
-            Ok(())
-        })?)?;
-        table.set("tags", lua.create_function(|lua, entity: LuaEntity| {
-            if let Some(ent) = lua.globals().get::<_, LuaWorld>("world").unwrap().write().get_entity(entity.0) {
-                let v: Option<HashMap<String, bool>> = ent.get::<Tags>().map(|t| t.0.iter().map(|s| (s.clone(), true)).collect());
-                Ok(v)
-            } else { Ok(None) }
-        })?)?;
-        Ok(())
-    }
-}
-/* ******* */
-/* Queries */
-/* ******* */
 
 #[derive(Clone)]
 pub struct LuaQuery {
@@ -72,7 +34,7 @@ impl LuaUserData for LuaQuery {
     }
 
     fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
-        methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(format!("Query {{with = {:?}, without = {:?}}}", this.with, this.without)));
+        methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(format!("query{{with = {:?}, without = {:?}}}", this.with, this.without)));
         methods.add_method("entities", |_lua, this, world: LuaWorld| {
             let with_types    = this.get_type_registries(|q| &q.with,    &world)?;
             let without_types = this.get_type_registries(|q| &q.without, &world)?;
@@ -115,13 +77,11 @@ impl LuaUserData for LuaQuery {
             }
             Ok(entities)
         });
-        methods.add_function_mut("with", |_, (this, typename): (LuaAnyUserData, String)| {
-            let mut this: LuaQuery = this.take()?;
+        methods.add_function_mut("with", |_, (mut this, typename): (LuaQuery, String)| {
             this.with.push(typename);
             Ok(this)
         });
-        methods.add_function_mut("without", |_, (this, typename): (LuaAnyUserData, String)| {
-            let mut this: LuaQuery = this.take()?;
+        methods.add_function_mut("without", |_, (mut this, typename): (LuaQuery, String)| {
             this.without.push(typename);
             Ok(this)
         });

@@ -28,19 +28,17 @@
         },
         materials: {
             "bkg": (
-                atlas:          (rows: 1, columns: 2, width: 2048, height: 1024),
+                atlas:          (width: 0.5, height: 1.),
                 texture:        "props/furniture/painting_frame.png",
                 color:          "background",
             ),
             "frame": (
-                atlas:          (rows: 1, columns: 2, width: 2048, height: 1024),
+                atlas:          (width: 0.5, height: 1.),
                 texture:        "props/furniture/painting_frame.png",
-                alpha_blend:    true,
                 color:          "#534a3b",
             ),
             "painting": (
                 texture:        "props/furniture/paintings/blank.png",
-                alpha_blend:    true,
                 color:          "#785c3b",
                 reflectance:    0.01,
             ),

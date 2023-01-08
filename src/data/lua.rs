@@ -8,9 +8,9 @@ use parking_lot::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{scripting::{time::LuaTime, bevy_api::{LuaEntity, math::{LuaVec2, LuaVec3}, handle::LuaHandle}, color::RgbaColor, lua_to_string, LuaMod, ui::text::TextBuilder}};
+use crate::{scripting::{time::LuaTime, bevy_api::{LuaEntity, math::{LuaVec2, LuaVec3}, handle::LuaHandle}, lua_to_string, LuaMod, ui::text::TextBuilder}, system::common::fix_missing_extension};
 
-use super::palette::{DynColor};
+use super::{palette::{DynColor}, rgba::RgbaColor};
 
 pub struct InstanceRef {
     pub lock: RwLock<Lua>,
@@ -57,6 +57,21 @@ pub enum InstanceKind {
 pub struct LuaScript {
     pub instance: InstanceKind,
     pub source:   String,
+}
+impl LuaMod for LuaScript {
+    fn mod_name() -> &'static str { "Script" }
+
+    fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
+        table.set("load", lua.create_function(|lua, path: String| {
+            let path = fix_missing_extension::<LuaScriptLoader>(path);
+            let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
+            let w = world.read();
+            let asset_server = w.resource::<AssetServer>();
+            let handle: Handle<LuaScript> = asset_server.load(&path);
+            Ok(LuaHandle::from(handle))
+        })?)?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -267,19 +282,6 @@ impl<'lua> FromLua<'lua> for ScriptVar {
         }
     }
 }
-impl LuaMod for ScriptVar {
-    fn mod_name() -> &'static str { "Vars" }
-    fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
-        table.set("all", lua.create_function(|ctx, entity: LuaEntity| {
-            let world = ctx.globals().get::<_, LuaWorld>("world").unwrap();
-            let w = world.read();
-            if let Some(vars) = w.get::<LuaScriptVars>(entity.0) {
-                Ok(Some(vars.0.clone().to_lua(ctx)?))
-            } else { Ok(None) }
-        })?)?;
-        Ok(())
-    }
-}
 impl From<()> for ScriptVar      { fn from(_: ())          -> Self { ScriptVar::Nil } }
 impl From<bool> for ScriptVar    { fn from(value: bool)    -> Self { ScriptVar::Bool(value) } }
 impl From<i8> for ScriptVar      { fn from(value: i8)      -> Self { ScriptVar::Int(value as i64) } }
@@ -353,12 +355,26 @@ impl<A, B, C, D, E> Into<ManyTransVars> for (A, B, C, D, E) where A: Into<TransV
     }
 }
 
-#[derive(Clone, Component, Debug, Default, Deserialize, Inspectable, PartialEq, Serialize)]
-pub struct LuaScriptVars(pub std::collections::HashMap<String, ScriptVar>);
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct LuaScriptVars(pub HashMap<String, ScriptVar>);
 
-impl LuaScriptVars {
-    pub fn merge(&mut self, other: &Self) {
-        self.0.extend(other.0.iter().map(|p| (p.0.clone(), p.1.clone())));
+#[derive(Clone, Component, Debug, Default, PartialEq)]
+pub struct LuaTransVars(pub HashMap<String, TransVar>);
+
+impl LuaTransVars {
+    pub fn new() -> LuaTransVars {
+        LuaTransVars(HashMap::new())
+    }
+
+    pub fn merge<T>(&mut self, other: HashMap<String, T>) where T: Clone + Into<TransVar> {
+        self.0.extend(other.into_iter().map(|(k, v)| (k, v.into())));
+    }
+}
+impl From<LuaScriptVars> for LuaTransVars {
+    fn from(value: LuaScriptVars) -> Self {
+        let mut transvars = LuaTransVars::new();
+        transvars.merge(value.0);
+        transvars
     }
 }
 
@@ -386,6 +402,19 @@ impl TransVar {
             TransVar::Handle(handle) => handle.get_image(),
             _ => None,
         }
+    }
+}
+impl LuaMod for TransVar {
+    fn mod_name() -> &'static str { "Vars" }
+    fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
+        table.set("all", lua.create_function(|lua, entity: LuaEntity| {
+            let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
+            let w = world.read();
+            if let Some(vars) = w.get::<LuaTransVars>(entity.0) {
+                Ok(Some(vars.0.clone().to_lua(lua)?))
+            } else { Ok(None) }
+        })?)?;
+        Ok(())
     }
 }
 impl<'lua> FromLua<'lua> for TransVar {
@@ -450,6 +479,7 @@ impl From<LuaTime> for TransVar { fn from(value: LuaTime) -> Self { TransVar::Ti
 impl From<String> for TransVar  { fn from(value: String)  -> Self { TransVar::Var(ScriptVar::Str(value)) } }
 impl From<Vec2> for TransVar    { fn from(value: Vec2)    -> Self { TransVar::Var(ScriptVar::Vec2(value)) } }
 impl From<Vec3> for TransVar    { fn from(value: Vec3)    -> Self { TransVar::Var(ScriptVar::Vec3(value)) } }
+impl From<ScriptVar> for TransVar { fn from(value: ScriptVar)  -> Self { TransVar::Var(value) } }
 impl<V> From<Option<V>> for TransVar where V: Clone + Into<TransVar> {
     fn from(value: Option<V>) -> Self {
         match value {

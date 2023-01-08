@@ -1,5 +1,8 @@
+TH = TH or {}
+TH.levels = TH.levels or {}
+
 function on_init()
-    Log.info("testing_house.lua on_init ran on behalf of {}; loaded at {} seconds", Level.name(), Time.elapsed())
+    Log.info("testing_house.lua on_init ran on behalf of {}; loaded at {} seconds", "testing_house.level.ron", Time.elapsed())
     -- local light = Light.new(LightKind.point(1600, 20, 0))
     -- local light = Light.new(LightKind.directional(28000.0, 10000.0))
     -- local light = Light.new(LightKind.default_spotlight(Vec3.new(0, 0, 0)))
@@ -8,7 +11,7 @@ function on_init()
     -- light.anim  = LightAnim.sin(0.15, 1.25) -- 0.1 * intensity over 0.5 seconds
     -- light:spawn()
     -- for _, light_ety in ipairs(Query.named("foyer_lights"):entities(world)) do
-    --     Entity.hide(light_ety)
+    --     light_ety:hide()
     -- end
     -- Level.reveal()
 
@@ -30,12 +33,15 @@ function on_init()
     end)
     -- Palette.load("palettes/woodblock"):on_load(Palette.swap)
 
-    Level.spawn_piece("pieces/kitchen", {
-        parent = entity,
-        name   = "kitchen",
-        reveal = true,
-        pos    = Vec3.new(0, 0, -10),
-    })
+    TH.levels.kitchen = Level.load("levels/pieces/kitchen")
+    TH.levels.kitchen:on_load(function(handle)
+        local level = handle:get()
+        level:spawn {
+            parent   = entity,
+            name     = "kitchen",
+            position = Vec3.new(0, 0, -10),
+        }
+    end)
     -- Palette.load("palettes/aom"):on_load(Palette.swap)
     -- Palette.load("palettes/default"):on_load(function(handle)
     --     local palette = handle:get()
@@ -52,8 +58,8 @@ function on_update(time)
     --     :send()
 end
 
-function on_room_reveal(ctx)
-    Log.info("testing_house.lua on_room_reveal ctx = {}", ctx)
+function on_room_reveal(name, entity)
+    Log.info("testing_house.lua on_room_reveal {} = ", name, entity)
     -- Message.new("on_whatever")
     --     :add_arg(ctx.name)
     --     :to_script("levels/testing/testing_house.lua")

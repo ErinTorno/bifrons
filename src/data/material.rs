@@ -1,40 +1,93 @@
-use std::{path::{PathBuf}, collections::{HashMap, HashSet}};
+use std::{path::{PathBuf}, collections::{HashMap, HashSet}, f32::consts::PI};
 
 use bevy::{prelude::*, render::{render_resource::{AddressMode, SamplerDescriptor, FilterMode}, texture::ImageSampler}};
 use bevy_inspector_egui::prelude::*;
 use mlua::prelude::*;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
-use crate::{scripting::{LuaMod, color::RgbaColor, bevy_api::{LuaEntity, handle::LuaHandle}}};
+use crate::{scripting::{LuaMod, bevy_api::{LuaEntity, handle::LuaHandle, math::LuaVec2}}};
 
-use super::{lua::{LuaWorld, Any3}, palette::{DynColor}};
+use super::{lua::{LuaWorld, Any3, Any2}, palette::{DynColor}, rgba::RgbaColor};
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub enum RepeatType {
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub enum RepeatOp {
+    AtlasRandom(Vec<AtlasIndex>),
     Identity,
-    Rotate180,
+    Rotate       { quarters: i32 },
+    RotateRandom { quarters: i32 },
 }
-impl RepeatType {
-    // pub fn map_uvs(&self, x: i32, y: i32, uvs: [f32; 4]) -> [f32; 4] {
-    //     match self {
-    //         RepeatType::Rotate180 if (x + y) % 2 == 0 => [uv_right, uv_left, uv_bottom, uv_top],
-    //         _ => uvs,
-    //     };
-    // }
+impl RepeatOp {
+    pub fn uv_rotate(&self, x: i32, y: i32) -> Vec2 {
+        let rot_z = match self {
+            RepeatOp::Rotate { quarters } => ((x + y) * quarters).rem_euclid(4),
+            RepeatOp::RotateRandom { quarters } => (rand::thread_rng().gen_range(0..4) * quarters).rem_euclid(4),
+            _ => 0,
+        } as f32;
+        Vec2::from_angle(PI * 0.5 * rot_z)
+    }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum MaterialMode {
     Stretch,
     Repeat {
         #[serde(default = "default_step")]
-        step:    f32,
-        #[serde(default = "default_on_step")]
-        on_step: RepeatType,
+        step:    Vec2,
+        #[serde(default = "default")]
+        on_step: Vec<RepeatOp>,
     },
 }
-fn default_step() -> f32 { 1. }
-fn default_on_step() -> RepeatType { RepeatType::Identity }
+fn default_step() -> Vec2 { Vec2::ONE }
+impl MaterialMode {
+    pub fn atlas_index(&self, def: AtlasIndex) -> AtlasIndex {
+        match &self {
+            MaterialMode::Stretch => def,
+            MaterialMode::Repeat { on_step, .. } => {
+                for op in on_step.iter() {
+                    if let RepeatOp::AtlasRandom(indices) = op {
+                        if !indices.is_empty() {
+                            let i = rand::thread_rng().gen_range(0..indices.len());
+                            return indices[i];
+                        }
+                    }
+                }
+                def
+            },
+        }
+    }
+
+    pub fn uv_rotate(&self, x: i32, y: i32, uv_left: f32, uv_right: f32, uv_top: f32, uv_bottom: f32, x_over: f32, y_over: f32) -> [[f32; 2]; 4] {
+        let center   = Vec2::new((uv_right - uv_left) / 2. + uv_left, (uv_bottom - uv_top) / 2. + uv_top);
+        let uv_right = x_over * (uv_right - uv_left) + uv_left;
+        let uv_top   = uv_bottom - y_over * (uv_bottom - uv_top);
+        let uvs = [
+            [uv_left,  uv_bottom],
+            [uv_left,  uv_top],
+            [uv_right, uv_top],
+            [uv_right, uv_bottom],
+        ];
+        match self {
+            MaterialMode::Stretch => uvs,
+            MaterialMode::Repeat { on_step, .. } => {
+                let rotation = on_step.iter()
+                    .map(|op| op.uv_rotate(x, y))
+                    .fold(Vec2::from_angle(0.), |a, b| b.rotate(a));
+                fn rotate(rotation: Vec2, center: Vec2, uv: [f32; 2]) -> [f32; 2] {
+                    let v = Vec2::new(uv[0], uv[1]) - center;
+                    let v = rotation.rotate(v) + center;
+                    [v.x, v.y]
+                }
+                [
+                    rotate(rotation, center, uvs[0]),
+                    rotate(rotation, center, uvs[1]),
+                    rotate(rotation, center, uvs[2]),
+                    rotate(rotation, center, uvs[3]),
+                ]
+            },
+        }
+    }
+}
 impl Default for MaterialMode {
     fn default() -> Self { MaterialMode::Stretch }
 }
@@ -62,16 +115,36 @@ impl LuaMod for MaterialMode {
     fn register_defs(lua: &Lua, table: &mut LuaTable<'_>) -> Result<(), LuaError> {
         table.set("stretch", MaterialMode::Stretch.to_lua(lua)?)?;
         table.set("repeat", lua.create_function(|_, table: LuaTable| {
-            let step = table.get::<_, Option<f32>>("step")?.unwrap_or(default_step());
-            let on_step = if let Some(mode) = table.get::<_, Option<String>>("mode")? {
-                match mode.as_str() {
-                    "identity" => RepeatType::Identity,
-                    "rotate180" => RepeatType::Rotate180,
-                    _ => {
-                        return Err(LuaError::RuntimeError(format!("No known RepeatType \"{}\"; valid values are {{\"identity\", \"rotate180\"}}", mode)));
-                    },
+            let step = table.get::<_, Option<LuaVec2>>("step")?.map(|v| v.0).unwrap_or(default_step());
+            let on_step = if let Some(ops_table) = table.get::<_, Option<LuaTable>>("ops")? {
+                let mut ops = Vec::new();
+                for r in ops_table.pairs::<LuaValue, LuaTable>() {
+                    let (_, op_config) = r?;
+                    let name = op_config.get::<_, String>("op")?;
+                    ops.push(match name.as_str() {
+                        "atlasrandom"   => {
+                            let mut v = Vec::new();
+                            for i in op_config.sequence_values::<AtlasIndex>() {
+                                v.push(i?);
+                            }
+                            RepeatOp::AtlasRandom(v)
+                        },
+                        "identity" => RepeatOp::Identity,
+                        "rotate"   => {
+                            let quarters = op_config.get("quarters")?;
+                            RepeatOp::Rotate { quarters }
+                        },
+                        "rotaterandom"   => {
+                            let quarters = op_config.get("quarters")?;
+                            RepeatOp::Rotate { quarters }
+                        },
+                        _ => {
+                            return Err(mlua::Error::RuntimeError(format!("Unknown matmode op {:?}", name)))
+                        }
+                    });
                 }
-            } else { default_on_step() };
+                ops
+            } else { Vec::new() };
             Ok(MaterialMode::Repeat { step, on_step })
         })?)?;
         Ok(())
@@ -80,38 +153,44 @@ impl LuaMod for MaterialMode {
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct AtlasIndex {
-    pub row: f32,
     pub col: f32,
+    pub row: f32,
+}
+impl<'lua> FromLua<'lua> for AtlasIndex {
+    fn from_lua(lua_value: LuaValue<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        Ok(match Any2::<LuaTable, LuaVec2>::from_lua(lua_value, lua)? {
+            Any2::A(table)      => AtlasIndex { col: table.get("col")?, row: table.get("row")? },
+            Any2::B(LuaVec2(v)) => AtlasIndex { col: v.x, row: v.y },
+        })
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct Atlas {
-    pub rows:    f32,
-    pub columns: f32,
     pub width:   f32,
     pub height:  f32,
+    #[serde(default)]
+    pub offset:  Vec2,
 }
 impl LuaUserData for Atlas {
     fn add_fields<'lua, F: mlua::UserDataFields<'lua, Self>>(fields: &mut F) {
-        fields.add_field_method_get("rows", |_, this| Ok(this.rows));
-        fields.add_field_method_set("rows", |_, this, rows| Ok(this.rows = rows));
-        fields.add_field_method_get("columns", |_, this| Ok(this.columns));
-        fields.add_field_method_set("columns", |_, this, columns| Ok(this.columns = columns));
-        fields.add_field_method_get("width", |_, this| Ok(this.width));
-        fields.add_field_method_set("width", |_, this, width| Ok(this.width = width));
+        fields.add_field_method_get("width",  |_, this| Ok(this.width));
+        fields.add_field_method_set("width",  |_, this, width| Ok(this.width = width));
         fields.add_field_method_get("height", |_, this| Ok(this.height));
         fields.add_field_method_set("height", |_, this, height| Ok(this.height = height));
+        fields.add_field_method_get("offset", |_, this| Ok(LuaVec2(this.offset)));
+        fields.add_field_method_set("offset", |_, this, v: LuaVec2| Ok(this.offset = v.0));
     }
 
     fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_meta_method(LuaMetaMethod::Eq, |_, this, that: Atlas| Ok(this == &that));
-        methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(format!("atlas{{rows = {}, columns = {}, width = {}, height = {}}}", this.rows, this.columns, this.width, this.height)));
+        methods.add_meta_method(LuaMetaMethod::ToString, |_, this, ()| Ok(format!("atlas{{width = {}, height = {}}}", this.width, this.height)));
     }
 }
 impl LuaMod for Atlas {
     fn mod_name() -> &'static str { "Atlas" }
     fn register_defs(lua: &Lua, table: &mut LuaTable<'_>) -> Result<(), LuaError> {
-        table.set("new", lua.create_function(|_ctx, (rows, columns, width, height)| Ok(Atlas { rows, columns, width, height}))?)?;
+        table.set("new", lua.create_function(|_, (width, height, offset): (_, _, Option<LuaVec2>)| Ok(Atlas { width, height, offset: offset.map(|v| v.0).unwrap_or(Vec2::ZERO)}))?)?;
         Ok(())
     }
 }
@@ -138,6 +217,20 @@ pub fn resolve_and_load_texture(file: &String, asset_server: &AssetServer) -> Ha
     asset_server.load(path)
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+pub enum TextureFilter {
+    Nearest,
+    Linear
+}
+impl From<TextureFilter> for FilterMode {
+    fn from(value: TextureFilter) -> Self {
+        match value {
+            TextureFilter::Nearest => FilterMode::Nearest,
+            TextureFilter::Linear  => FilterMode::Linear,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TextureMaterial {
     pub texture:          String,
@@ -156,15 +249,17 @@ pub struct TextureMaterial {
     pub metallic:         f32,
     #[serde(default = "default_reflectance")]
     pub reflectance:      f32,
-    #[serde(default = "default_alpha_blend")]
-    pub alpha_blend:      bool,
+    #[serde(default)]
+    pub alpha_blend:      Option<bool>,
     #[serde(default)]
     pub unlit:            bool,
+    #[serde(default = "default_filter")]
+    pub filter:           TextureFilter,
 }
 fn default_emissive_color() -> DynColor { DynColor::CONST_BLACK }
 fn default_metallic() -> f32 { 0.01 }
 fn default_reflectance() -> f32 { 0.25 }
-fn default_alpha_blend() -> bool { false }
+fn default_filter() -> TextureFilter { TextureFilter::Linear }
 impl TextureMaterial {
     pub fn load_textures(&self, asset_server: &AssetServer) -> TextureHandles {
         TextureHandles {
@@ -178,7 +273,7 @@ impl TextureMaterial {
         &self,
         asset_server: &AssetServer,
         tex_mat_info: &mut TexMatInfo,
-        materials: &mut Assets<StandardMaterial>,
+        materials:    &mut Assets<StandardMaterial>,
     ) -> Handle<StandardMaterial> {
         let handles = self.load_textures(&asset_server);
         let handle = materials.add(self.make_material(handles, tex_mat_info));
@@ -187,22 +282,22 @@ impl TextureMaterial {
     }
 
     pub fn make_material(&self, handles: TextureHandles, tex_mat_info: &mut TexMatInfo) -> StandardMaterial {
-        let address_mode = self.mode.into();
+        let address_mode = self.mode.clone().into();
         tex_mat_info.samplers.insert(handles.texture.clone(), ImageSampler::Descriptor(SamplerDescriptor {
-            mag_filter: FilterMode::Nearest,
-            min_filter: FilterMode::Nearest,
+            mag_filter:     self.filter.into(),
+            min_filter:     self.filter.into(),
             address_mode_u: address_mode,
             address_mode_v: address_mode,
             ..default()
         }));
         StandardMaterial {
             base_color_texture: Some(handles.texture),
-            emissive_texture: handles.emissive,
+            emissive_texture:   handles.emissive,
             normal_map_texture: handles.normal,
-            alpha_mode: if self.alpha_blend { AlphaMode::Blend } else { AlphaMode::Mask(0.05) }, // hack-hack until Bevy bug with AlphaMode::Blend render orders
-            unlit: self.unlit || self.color == DynColor::Background,
-            metallic: self.metallic,
-            reflectance: self.reflectance,
+            alpha_mode:         if self.alpha_blend.unwrap_or(self.color != DynColor::Background) { AlphaMode::Blend } else { AlphaMode::Mask(0.05) }, // hack-hack until Bevy bug with AlphaMode::Blend render orders
+            unlit:              self.unlit || self.color == DynColor::Background,
+            metallic:           self.metallic,
+            reflectance:        self.reflectance,
             // double_sided: true,
             // cull_mode: None,
             ..default()
@@ -211,10 +306,10 @@ impl TextureMaterial {
 
     pub fn get_uvs(&self, idx: AtlasIndex) -> [f32; 4] {
         if let Some(atlas) = self.atlas {
-            let uv_left   = idx.col / atlas.columns;
-            let uv_right  = (idx.col + 1.) / atlas.columns;
-            let uv_top    = idx.row / atlas.rows;
-            let uv_bottom = (idx.row + 1.) / atlas.rows;
+            let uv_left   = atlas.offset.x + atlas.width * idx.col;
+            let uv_right  = atlas.offset.x + atlas.width * (idx.col + 1.);
+            let uv_top    = atlas.offset.y + atlas.height * idx.row;
+            let uv_bottom = atlas.offset.y + atlas.height * (idx.row + 1.);
             [uv_left, uv_right, uv_top, uv_bottom]
         } else { [0., 1., 0., 1.] }
     }
@@ -229,8 +324,9 @@ impl TextureMaterial {
         metallic: 0.,
         reflectance: 0.,
         atlas: None,
-        alpha_blend: false,
+        alpha_blend: Some(false),
         unlit: true,
+        filter: TextureFilter::Nearest,
     };
     pub const MISSING: TextureMaterial = TextureMaterial {
         texture: String::new(),
@@ -242,8 +338,9 @@ impl TextureMaterial {
         metallic: 0.6,
         reflectance: 0.8,
         atlas: None,
-        alpha_blend: false,
+        alpha_blend: Some(false),
         unlit: false,
+        filter: TextureFilter::Nearest,
     };
 }
 impl LuaUserData for TextureMaterial {

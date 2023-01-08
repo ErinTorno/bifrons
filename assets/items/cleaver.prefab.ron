@@ -22,14 +22,13 @@
             "out": (
                 color:            "#9cabb1",
                 texture:          "items/cleaver.png",
-                alpha_blend:      true,
-                atlas:            (rows: 1, columns: 2, width: 430, height: 768),
+                atlas:            (width: 0.5, height: 1.),
                 metallic:         0.9,
             ),
             "bkg": (
                 color:            "background",
                 texture:          "items/cleaver.png",
-                atlas:            (rows: 1, columns: 2, width: 430, height: 768),
+                atlas:            (width: 0.5, height: 1.),
             ),
         },
     ),

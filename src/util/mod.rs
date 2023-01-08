@@ -1,6 +1,6 @@
-use std::cmp::Ordering;
+use std::{cmp::Ordering, hash::{Hash, Hasher}, collections::hash_map::DefaultHasher};
 
-use bevy::{prelude::{Color, Component}, ecs::system::EntityCommands};
+use bevy::{prelude::{Color}};
 use bevy_inspector_egui::prelude::*;
 use ron::{Options, extensions::Extensions};
 
@@ -9,6 +9,12 @@ pub fn ron_options() -> Options {
 }
 
 pub mod collections;
+
+pub fn easy_hash<H>(h: &H) -> u64 where H: Hash {
+    let mut hasher = DefaultHasher::new();
+    h.hash(&mut hasher);
+    hasher.finish()
+}
 
 pub trait IntoHex {
     fn into_hex(&self) -> String;
@@ -32,19 +38,6 @@ pub struct Timestamped<T> {
 
 pub fn pair_clone<A, B>((a, b): (&A, &B)) -> (A, B) where A: Clone, B: Clone {
     (a.clone(), b.clone())
-}
-
-pub trait InsertableWithPredicate {
-    fn insert_if<F, C>(&mut self, b: bool, make_component: F) -> &mut Self where F: FnOnce() -> C, C: Component;
-}
-
-impl<'w, 's, 'a> InsertableWithPredicate for EntityCommands<'w, 's, 'a> {
-    fn insert_if<F, C>(&mut self, b: bool, make_component: F) -> &mut Self where F: FnOnce() -> C, C: Component {
-        if b {
-            self.insert(make_component());
-        }
-        self
-    }
 }
 
 #[derive(Clone, Copy, Debug)]

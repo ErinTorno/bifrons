@@ -1,0 +1,41 @@
+(
+    materials: {
+        "floor": (
+            layer:   Outline,
+            color:   "grey",
+            texture: "tiles/floor_squiggle_small.png",
+            mode:    Repeat(step: (2., 2.), on_step: [Rotate(quarters: 2)]),
+        ),
+    },
+    rooms: {
+        "kitchen/main": (
+            pos: (0., -0.5, 0.),
+            grid: {
+                "main": (shape: Rect(w: 7, h: 11)),
+            },
+            prefabs: [
+                (asset: "props/furniture/end_table", at: Free(-2.9, 0., 0.)),
+                (asset: "items/cleaver",             at: Free(-2.65, 0.555, 0.), rotation: (0., 2., -2.)),
+                (
+                    asset: "items/lantern",
+                    at: Free(-3, 0.34, 0.1),
+                    rotation: (0., 1.0471, 0.),
+                    script_vars: {
+                        "lantern_color":    Color("red"),
+                        "lantern_emissive": Color("wine"),
+                    },
+                ),
+            ],
+            geometry: [
+                (
+                    label:     "floor",
+                    pos:       (0., 0., 0.),
+                    shape:     Quad(w: 7., h: 5.),
+                    rotation:  (-1.57079632679, 0., 0.),
+                    materials: ["background", "floor"],
+                    is_solid:  true,
+                ),
+            ],
+        ),
+    },
+)

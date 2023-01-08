@@ -24,6 +24,16 @@ Rgba.new = function(r: number, g: number, b: number, a: number or nil) -> rgba
 Rgba.new_linear = function(r: number, g: number, b: number, a: number or nil) -> rgba
 ```
 
+## Rgba.__call
+```lua
+function Rgba:__call(s: string) -> rgba
+```
+Creates an rgba color by parsing the given string `s`. As the only param is a string, this is frequently called without parentheses.
+
+The following strings are valid rgba colors:
+- `"#4b6a2aff"`: a sRGB(A) color; the final two chars for the alpha are optional, and default to `0xff`.
+- `"linear(r: 0.27, g: 0.09, b: 0.36, a: 1)"`: a linear SRGB(A) color; the alpha param `a` is optional, and defaults to 1.
+
 ## Constants
 
 ## 🔳 Rgba.black

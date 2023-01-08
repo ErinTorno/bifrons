@@ -10,7 +10,7 @@ use bevy_inspector_egui::WorldInspectorPlugin;
 use bevy_kira_audio::prelude::*;
 use bevy::{prelude::*, diagnostic::{LogDiagnosticsPlugin}};
 use bevy_rapier3d::{prelude::{NoUserData, RapierPhysicsPlugin}};
-use data::{prefab::{Prefab, PrefabLoader}, level::{Level, LevelLoader, LevelPiece, LevelPieceLoader}, formlist::{FormList, FormListLoader}, assetio::{VirtualAssetIo, VirtualFileOverrides}};
+use data::{prefab::{Prefab, PrefabLoader}, formlist::{FormList, FormListLoader}, assetio::{VirtualAssetIo, VirtualFileOverrides}};
 use scripting::ui::font::{FontLoader, UIFont};
 
 mod data;
@@ -46,15 +46,11 @@ fn main() {
         .add_plugin(system::texture::TexturePlugin)
         .add_plugin(system::ui::ScriptingUiPlugin)
         .add_asset::<FormList>()
-        .add_asset::<Level>()
-        .add_asset::<LevelPiece>()
         .add_asset::<Prefab>()
         .add_asset::<scripting::ui::elem::Container>()
         .add_asset::<UIFont>()
         .init_asset_loader::<FontLoader>()
         .init_asset_loader::<FormListLoader>()
-        .init_asset_loader::<LevelLoader>()
-        .init_asset_loader::<LevelPieceLoader>()
         .init_asset_loader::<PrefabLoader>()
         .run();
 }

@@ -1,5 +1,6 @@
-/target
+target/
 /assets/chars/placeholder
 /dev-notes
 Cargo.lock
 *_dnc.*
+*.ktx2

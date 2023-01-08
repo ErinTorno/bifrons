@@ -12,7 +12,6 @@ use serde::{de::*, Deserialize, Serialize};
 use crate::data::lua::ScriptVar;
 use crate::scripting::{LuaMod, lua_to_string};
 use crate::scripting::bevy_api::handle::LuaHandle;
-use crate::scripting::{color::RgbaColor};
 use crate::system::common::{fix_missing_extension};
 use crate::system::lua::SharedInstances;
 use crate::system::palette::LoadingPalette;
@@ -20,6 +19,7 @@ use crate::util::{IntoHex, RoughlyEq};
 use crate::util::ron_options;
 
 use super::lua::{ManyTransVars, LuaWorld, LuaReadable, InstanceRef, Any3, TransVar};
+use super::rgba::RgbaColor;
 
 pub type LuaToDynColor = Any3<DynColor, RgbaColor, String>;
 
@@ -30,6 +30,21 @@ pub enum DynColor {
     Const(RgbaColor),
     Custom(RgbaColor),
     Named(String),
+}
+impl RoughlyEq<DynColor> for DynColor {
+    type Epsilon = f32;
+
+    fn default_epsilon() -> Self::Epsilon { 0.0001 }
+
+    fn roughly_eq_within(&self, that: &DynColor, epsilon: Self::Epsilon) -> bool {
+        match (self, that) {
+            (DynColor::Background, DynColor::Background) => true,
+            (DynColor::Const(a),   DynColor::Const(b))   => a.roughly_eq_within(b, epsilon),
+            (DynColor::Custom(a),  DynColor::Custom(b))  => a.roughly_eq_within(b, epsilon),
+            (DynColor::Named(a),   DynColor::Named(b))   => a == b,
+            _ => false,
+        }
+    }
 }
 impl DynColor {
     pub const CONST_BLACK:       DynColor = DynColor::Const(RgbaColor::BLACK);
@@ -98,6 +113,8 @@ impl FromStr for DynColor {
             Ok(DynColor::Background)
         } else if s.starts_with("#") || s.starts_with("linear(") {
             Ok(DynColor::Custom(RgbaColor::from_str(s)?))
+        } else if s.starts_with("const(") {
+            Ok(DynColor::Const(RgbaColor::from_str(&s[6..(s.len()-1)])?))
         } else {
             Ok(DynColor::Named(s.to_string()))
         }
@@ -128,9 +145,9 @@ impl RoughlyEq<DynColor> for &DynColor {
     fn roughly_eq_within(&self, that: &DynColor, epsilon: Self::Epsilon) -> bool {
         match (self, that) {
             (DynColor::Background, DynColor::Background) => true,
-            (DynColor::Const(a),  DynColor::Const(b)) => a.roughly_eq_within(b, epsilon),
-            (DynColor::Named(a),  DynColor::Named(b)) => a == b,
-            (DynColor::Custom(a), DynColor::Custom(b)) => a.roughly_eq_within(b, epsilon),
+            (DynColor::Const(a),   DynColor::Const(b))   => a.roughly_eq_within(b, epsilon),
+            (DynColor::Named(a),   DynColor::Named(b))   => a == b,
+            (DynColor::Custom(a),  DynColor::Custom(b))  => a.roughly_eq_within(b, epsilon),
             _ => false,
         }
     }
@@ -180,9 +197,7 @@ impl LuaMod for DynColor {
         table.set("background", DynColor::Background.to_lua(lua)?)?;
         table.set("const", lua.create_function(|_, rgba: RgbaColor| Ok(DynColor::Const(rgba)))?)?;
         table.set("custom", lua.create_function(|_, rgba: RgbaColor| Ok(DynColor::Custom(rgba)))?)?;
-        table.set("named", lua.create_function(|_, name: String| {
-            Ok(DynColor::Named(name))
-        })?)?;
+        table.set("named", lua.create_function(|_, name: String| { Ok(DynColor::Named(name)) })?)?;
         table.set("transparent", lua.create_function(|_, ()| Ok(DynColor::Const(RgbaColor::TRANSPARENT)))?)?;
 
         let meta = table.get_metatable().unwrap_or(lua.create_table()?);
@@ -610,5 +625,42 @@ impl ColorCache {
             self.0.insert(handle.clone(), HashMap::new());
         }
         self.0.get_mut(handle).unwrap()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use crate::{util::RoughlyEq, data::rgba::RgbaColor};
+
+    use super::DynColor;
+
+    fn assert_dyncolor(a: DynColor, b: DynColor) {
+        assert!(a.roughly_eq_within(&b, 0.01), "`{:?}` != `{:?}`", a, b);
+    }
+
+    #[test]
+    fn color_from_str() {
+        assert_dyncolor(
+            DynColor::Background,
+            DynColor::from_str("background").unwrap(),
+        );
+        assert_dyncolor(
+            DynColor::Custom(RgbaColor { r: 0., g: 0., b: 0., a: 1., is_linear: false }),
+            DynColor::from_str("#000000").unwrap(),
+        );
+        assert_dyncolor(
+            DynColor::Const(RgbaColor { r: 0., g: 0., b: 0., a: 1., is_linear: false }),
+            DynColor::from_str("const(#000000)").unwrap(),
+        );
+        assert_dyncolor(
+            DynColor::Named("black".to_string()),
+            DynColor::from_str("black").unwrap(),
+        );
+        assert_dyncolor(
+            DynColor::Const(RgbaColor::FUCHSIA.as_linear()),
+            DynColor::from_str("const(linear(r: 0.2738, g: 0.0946, b: 0.3672))").unwrap(),
+        );
     }
 }

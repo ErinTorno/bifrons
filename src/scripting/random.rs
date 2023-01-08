@@ -63,6 +63,14 @@ impl LuaMod for RandomAPI {
             }
             Ok(with_rng(|r| r.gen_range(0.0..1.0)))
         })?)?;
+        table.set("set_seed", lua.create_function(|_lua, new_seed: u64| {
+            set_seed(new_seed);
+            Ok(())
+        })?)?;
+        table.set("true_random_seed", lua.create_function(|_lua, ()| {
+            set_seed(rand::prelude::random());
+            Ok(())
+        })?)?;
         table.set("value", lua.create_function(|_lua, table: LuaTable| {
             match table.len()? {
                 l if l <= 0 => Ok(None),

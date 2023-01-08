@@ -1,6 +1,6 @@
 use bevy::{prelude::*, asset::LoadState};
 use bevy_inspector_egui::prelude::*;
-use crate::{system::common::ToInit, data::{prefab::*, input::{ActionState, InputMap}, material::{TexMatInfo, LoadedMaterials, MaterialColors, MaterialsToInit}, stat::Attributes, lua::{LuaScriptVars}}, util::pair_clone};
+use crate::{system::common::ToInit, data::{prefab::*, input::{ActionState, InputMap}, material::{TexMatInfo, LoadedMaterials, MaterialColors, MaterialsToInit}, stat::Attributes, lua::{LuaTransVars}}, util::pair_clone};
 
 use super::{texture::{Background}, camera::{ActiveCamera, Focus}, common::ToInitHandle, lua::{ToInitScripts, SharedInstances, LuaQueue}};
 
@@ -26,10 +26,10 @@ pub fn temp_setup(
     asset_server:  Res<AssetServer>,
 ) {
     commands.spawn((
-        LuaScriptVars::default(),
+        LuaTransVars::new(),
         Name::new("player"),
         Player { id: 0 },
-        ToInitHandle::<Prefab>::new(asset_server.load("chars/labolas.prefab.ron")),
+        ToInitHandle::<Prefab>::new(asset_server.load("chars/test_satori.prefab.ron")),
         TransformBundle {
             ..default()
         },
@@ -48,7 +48,7 @@ pub fn spawn_prefab(
     prefabs:           Res<Assets<Prefab>>,
     mut meshes:        ResMut<Assets<Mesh>>,
     mut materials:     ResMut<Assets<StandardMaterial>>,
-    mut to_spawn:      Query<(Entity, &ToInitHandle<Prefab>, &mut LuaScriptVars, Option<&Player>, Option<&LoadedMaterials>, Option<&mut Attributes>)>,
+    mut to_spawn:      Query<(Entity, &ToInitHandle<Prefab>, &mut LuaTransVars, Option<&Player>, Option<&LoadedMaterials>, Option<&mut Attributes>)>,
 ) {
     for (entity, ToInitHandle(handle), mut script_vars, player, loaded_mats, attributes) in to_spawn.iter_mut() {
         if let Some(prefab) = prefabs.get(&handle) {
@@ -71,7 +71,7 @@ pub fn spawn_prefab(
             }
 
             if !prefab.scripts.is_empty() {
-                script_vars.merge(&prefab.script_vars);
+                script_vars.merge(prefab.script_vars.0.clone());
 
                 commands.entity(entity)
                     .insert((

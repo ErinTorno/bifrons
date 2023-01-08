@@ -5,9 +5,9 @@ use bevy_inspector_egui::prelude::*;
 use mlua::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::{scripting::{color::RgbaColor, LuaMod, bevy_api::{math::LuaVec3, LuaEntity}}};
+use crate::{scripting::{LuaMod, bevy_api::{math::LuaVec3, LuaEntity}}};
 
-use super::{material::*, lua::{LuaWorld, Any3}, palette::{DynColor, SingleColored}};
+use super::{material::*, lua::{LuaWorld, Any3}, palette::{DynColor, SingleColored}, rgba::RgbaColor};
 
 #[derive(Clone, Debug)]
 pub struct AnimatedMesh {
@@ -86,132 +86,22 @@ impl Shape {
         }
     }
 
-    pub fn mk_mesh(&self, mat: &TextureMaterial, offset: Vec3, idx: AtlasIndex) -> Mesh {
+    pub fn mk_mesh(&self, mat: &TextureMaterial, offset: Vec3, atlas_idx: AtlasIndex) -> Mesh {
         let mut builder = MeshBuilder::default();
-        let [uv_left, uv_right, uv_top, uv_bottom] = mat.get_uvs(idx);
         match self {
-            Shape::Box {w, h, d} => {
-                let extent_x = w * 0.5;
-                let extent_y = h * 0.5;
-                match mat.mode {
-                    MaterialMode::Stretch => {
-                        builder.push_indices(vec![0, 2, 1, 0, 3, 2]);
-                        let min_x = -extent_x + offset.x;
-                        let max_x =  extent_x + offset.x;
-                        let min_y = -extent_y + offset.y;
-                        let max_y =  extent_y + offset.y;
-                        let front_z = offset.z + d / 2.;
-                        builder.push([min_x, min_y, front_z], [0., 0., 1.], [uv_left,  uv_bottom]);
-                        builder.push([min_x, max_y, front_z], [0., 0., 1.], [uv_left,  uv_top]);
-                        builder.push([max_x, max_y, front_z], [0., 0., 1.], [uv_right, uv_top]);
-                        builder.push([max_x, min_y, front_z], [0., 0., 1.], [uv_right, uv_bottom]);
-                    },
-                    MaterialMode::Repeat { step, on_step } => {
-                        let y_over = (h / step) - (h / step).floor();
-                        let x_over = (w / step) - (w / step).floor();
-
-                        let y_steps = (h / step).abs().ceil() as i32;
-                        for y in 0..y_steps {
-                            let offset_y = step * y as f32 + offset.y;
-                            let min_y = -extent_y + offset_y;
-                            let max_y = (-extent_y + offset_y + step).min(extent_y + offset.y);
-                            let uv_left = if y == y_steps - 1 { y_over } else { uv_left };
-                            let x_steps = (w / step).abs().ceil() as i32;
-                            for x in 0..x_steps {
-                                let offset_x = step * x as f32 + offset.x;
-                                let i = builder.len() as u32;
-                                builder.push_indices(vec![i + 0, i + 2, i + 1, i + 0, i + 3, i + 2]);
-                                let min_x = -extent_x + offset_x;
-                                let max_x = (-extent_x + offset_x + step).min(extent_x + offset.x);
-                                let uv_bottom = if x == x_steps - 1 { 1. - x_over } else { uv_bottom };
-                                let [uv_left, uv_right, uv_top, uv_bottom] = match on_step {
-                                    RepeatType::Rotate180 if (x + y) % 2 == 0 && (y != y_steps - 1) && (x != x_steps - 1) => [uv_right, uv_left, uv_bottom, uv_top],
-                                    _ => [uv_left, uv_right, uv_top, uv_bottom],
-                                };
-                                let front_z = offset.z + d / 2.;
-                                builder.push([min_x, min_y, front_z], [0., 0., 1.], [uv_left,  uv_bottom]);
-                                builder.push([min_x, max_y, front_z], [0., 0., 1.], [uv_left,  uv_top]);
-                                builder.push([max_x, max_y, front_z], [0., 0., 1.], [uv_right, uv_top]);
-                                builder.push([max_x, min_y, front_z], [0., 0., 1.], [uv_right, uv_bottom]);
-                            }
-                        }
-                    },
-                }
-
-                // let max_x = w / 2.;
-                // let max_y = h / 2.;
-                // let max_z = d / 2.;
-                // let min_x = -max_x;
-                // let min_y = -max_y;
-                // let min_z = -max_z;
-
-                // for i in 0..(w.ceil().abs() as i32) {
-                //     ([min_x, min_y, max_z], [0., 0., 1.0], [0., 0.]),
-                //     ([max_x, min_y, max_z], [0., 0., 1.0], [1.0, 0.]),
-                //     ([max_x, max_y, max_z], [0., 0., 1.0], [1.0, 1.0]),
-                //     ([min_x, max_y, max_z], [0., 0., 1.0], [0., 1.0]),
-                // }
-
-                // let vertices = &[
-                //     // Top
-                //     ([min_x, min_y, max_z], [0., 0., 1.0], [0., 0.]),
-                //     ([max_x, min_y, max_z], [0., 0., 1.0], [1.0, 0.]),
-                //     ([max_x, max_y, max_z], [0., 0., 1.0], [1.0, 1.0]),
-                //     ([min_x, max_y, max_z], [0., 0., 1.0], [0., 1.0]),
-                //     // Bottom
-                //     ([min_x, max_y, min_z], [0., 0., -1.0], [1.0, 0.]),
-                //     ([max_x, max_y, min_z], [0., 0., -1.0], [0., 0.]),
-                //     ([max_x, min_y, min_z], [0., 0., -1.0], [0., 1.0]),
-                //     ([min_x, min_y, min_z], [0., 0., -1.0], [1.0, 1.0]),
-                //     // Right
-                //     ([max_x, min_y, min_z], [1.0, 0., 0.], [0., 0.]),
-                //     ([max_x, max_y, min_z], [1.0, 0., 0.], [1.0, 0.]),
-                //     ([max_x, max_y, max_z], [1.0, 0., 0.], [1.0, 1.0]),
-                //     ([max_x, min_y, max_z], [1.0, 0., 0.], [0., 1.0]),
-                //     // Left
-                //     ([min_x, min_y, max_z], [-1.0, 0., 0.], [1.0, 0.]),
-                //     ([min_x, max_y, max_z], [-1.0, 0., 0.], [0., 0.]),
-                //     ([min_x, max_y, min_z], [-1.0, 0., 0.], [0., 1.0]),
-                //     ([min_x, min_y, min_z], [-1.0, 0., 0.], [1.0, 1.0]),
-                //     // Front
-                //     ([max_x, max_y, min_z], [0., 1.0, 0.], [1.0, 0.]),
-                //     ([min_x, max_y, min_z], [0., 1.0, 0.], [0., 0.]),
-                //     ([min_x, max_y, max_z], [0., 1.0, 0.], [0., 1.0]),
-                //     ([max_x, max_y, max_z], [0., 1.0, 0.], [1.0, 1.0]),
-                //     // Back
-                //     ([max_x, min_y, max_z], [0., -1.0, 0.], [0., 0.]),
-                //     ([min_x, min_y, max_z], [0., -1.0, 0.], [1.0, 0.]),
-                //     ([min_x, min_y, min_z], [0., -1.0, 0.], [1.0, 1.0]),
-                //     ([max_x, min_y, min_z], [0., -1.0, 0.], [0., 1.0]),
-                // ];
-        
-                // let positions: Vec<_> = vertices.iter().map(|(p, _, _)| *p).collect();
-                // let normals: Vec<_> = vertices.iter().map(|(_, n, _)| *n).collect();
-                // let uvs: Vec<_> = vertices.iter().map(|(_, _, uv)| *uv).collect();
-        
-                // let indices = Indices::U32(vec![
-                //     0, 1, 2, 2, 3, 0, // top
-                //     4, 5, 6, 6, 7, 4, // bottom
-                //     8, 9, 10, 10, 11, 8, // right
-                //     12, 13, 14, 14, 15, 12, // left
-                //     16, 17, 18, 18, 19, 16, // front
-                //     20, 21, 22, 22, 23, 20, // back
-                // ]);
-        
-                // mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-                // mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-                // mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-                // mesh.set_indices(Some(indices));
+            Shape::Box {..} => {
+                unimplemented!();
             },
             Shape::Quad { w, h, d, one_sided } => {
                 let extent_x = w * 0.5;
                 let extent_y = h * 0.5;
                 match mat.mode {
                     MaterialMode::Stretch => {
-                        let min_x = -extent_x + offset.x;
-                        let max_x =  extent_x + offset.x;
-                        let min_y = -extent_y + offset.y;
-                        let max_y =  extent_y + offset.y;
+                        let [uv_left, uv_right, uv_top, uv_bottom] = mat.get_uvs(atlas_idx);
+                        let min_x   = -extent_x + offset.x;
+                        let max_x   =  extent_x + offset.x;
+                        let min_y   = -extent_y + offset.y;
+                        let max_y   =  extent_y + offset.y;
                         let front_z = offset.z + d / 2.;
                         let back_z  = offset.z - d / 2.;
                         builder.push([min_x, min_y, front_z], [0., 0., 1.], [uv_left,  uv_bottom]);
@@ -227,39 +117,39 @@ impl Shape {
                             builder.push_indices(vec![4, 6, 5, 4, 7, 6]);
                         }
                     },
-                    MaterialMode::Repeat { step, on_step } => {
-                        let y_over = (h / step) - (h / step).floor();
-                        let x_over = (w / step) - (w / step).floor();
+                    MaterialMode::Repeat { step, .. } => {
+                        let y_over = (h / step.y) - (h / step.y).floor();
+                        let x_over = (w / step.x) - (w / step.x).floor();
 
-                        let y_steps = (h / step).abs().ceil() as i32;
+                        let y_steps = (h / step.y).abs().ceil() as i32;
                         for y in 0..y_steps {
-                            let offset_y = step * y as f32 + offset.y;
+                            let offset_y = step.y * y as f32 + offset.y;
                             let min_y = -extent_y + offset_y;
-                            let max_y = (-extent_y + offset_y + step).min(extent_y + offset.y);
-                            let uv_left = if y == y_steps - 1 { y_over } else { uv_left };
-                            let x_steps = (w / step).abs().ceil() as i32;
+                            let max_y = (-extent_y + offset_y + step.y).min(extent_y + offset.y);
+                            let x_steps = (w / step.x).abs().ceil() as i32;
                             for x in 0..x_steps {
-                                let offset_x = step * x as f32 + offset.x;
+                                let offset_x = step.x * x as f32 + offset.x;
                                 let i = builder.len() as u32;
                                 let min_x = -extent_x + offset_x;
-                                let max_x = (-extent_x + offset_x + step).min(extent_x + offset.x);
-                                let uv_bottom = if x == x_steps - 1 { 1. - x_over } else { uv_bottom };
-                                let [uv_top, uv_bottom, uv_left, uv_right] = match on_step {
-                                    RepeatType::Rotate180 if (x + y) % 2 == 0 && (y != y_steps - 1) && (x != x_steps - 1) => [uv_right, uv_left, uv_bottom, uv_top],
-                                    _ => [uv_left, uv_right, uv_top, uv_bottom],
-                                };
+                                let max_x = (-extent_x + offset_x + step.x).min(extent_x + offset.x);
+                                let atlas_idx = mat.mode.atlas_index(atlas_idx);
+                                let [uv_left, uv_right, uv_top, uv_bottom] = mat.get_uvs(atlas_idx);
+                                let uvs = mat.mode.uv_rotate(x, y, uv_left, uv_right, uv_top, uv_bottom,
+                                    if (x + 1) == x_steps && x_over > 0. { x_over } else { 1. },
+                                    if (y + 1) == y_steps && y_over > 0. { y_over } else { 1. },
+                                );
                                 let front_z = offset.z + d / 2.;
                                 let back_z  = offset.z - d / 2.;
-                                builder.push([min_x, min_y, front_z], [0., 0., 1.], [uv_left,  uv_bottom]);
-                                builder.push([min_x, max_y, front_z], [0., 0., 1.], [uv_left,  uv_top]);
-                                builder.push([max_x, max_y, front_z], [0., 0., 1.], [uv_right, uv_top]);
-                                builder.push([max_x, min_y, front_z], [0., 0., 1.], [uv_right, uv_bottom]);
+                                builder.push([min_x, min_y, front_z], [0., 0., 1.], uvs[0]);
+                                builder.push([min_x, max_y, front_z], [0., 0., 1.], uvs[1]);
+                                builder.push([max_x, max_y, front_z], [0., 0., 1.], uvs[2]);
+                                builder.push([max_x, min_y, front_z], [0., 0., 1.], uvs[3]);
                                 builder.push_indices(vec![i + 0, i + 2, i + 1, i + 0, i + 3, i + 2]);
                                 if !one_sided {
-                                    builder.push([min_x, max_y, back_z ], [0., 0., -1.], [uv_left,  uv_top]);
-                                    builder.push([min_x, min_y, back_z ], [0., 0., -1.], [uv_left,  uv_bottom]);
-                                    builder.push([max_x, min_y, back_z ], [0., 0., -1.], [uv_right, uv_bottom]);
-                                    builder.push([max_x, max_y, back_z ], [0., 0., -1.], [uv_right, uv_top]);
+                                    builder.push([min_x, max_y, back_z ], [0., 0., -1.], uvs[1]);
+                                    builder.push([min_x, min_y, back_z ], [0., 0., -1.], uvs[0]);
+                                    builder.push([max_x, min_y, back_z ], [0., 0., -1.], uvs[3]);
+                                    builder.push([max_x, max_y, back_z ], [0., 0., -1.], uvs[2]);
                                     builder.push_indices(vec![i + 4, i + 6, i + 5, i + 4, i + 7, i + 6]);
                                 }
                             }
@@ -511,7 +401,7 @@ pub struct Light {
     #[serde(default)]
     pub anim: LightAnim,
 }
-fn default_color() -> DynColor { DynColor::Const(RgbaColor::WHITE) }
+fn default_color() -> DynColor { DynColor::CONST_WHITE }
 fn default_shadows_enabled() -> bool { true }
 pub fn default_shadow_depth_bias() -> f32 { 0.02 }
 pub fn default_shadow_normal_bias() -> f32 { 0.6 }

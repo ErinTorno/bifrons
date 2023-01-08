@@ -6,11 +6,11 @@ use mlua::prelude::*;
 use parking_lot::MappedRwLockReadGuard;
 use serde::{Deserialize, Serialize};
 
-use crate::{data::{formlist::FormList, palette::Palette, lua::LuaWorld, material::TexMatInfo, level::Level}, scripting::{bevy_api::LuaEntity, ui::{self, font::UIFont}}};
+use crate::{data::{formlist::FormList, palette::Palette, lua::{LuaWorld, LuaScript}, material::TexMatInfo, level::{Level, LoadedLevel, LoadedLevelCache}}, scripting::{bevy_api::LuaEntity, ui::{self, font::UIFont}}};
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct AssetEventKey {
-    pub entity:    Entity,
+    pub entity:    Option<Entity>,
     pub handle:    LuaHandle,
     pub script_id: u32,
 }
@@ -26,9 +26,10 @@ pub enum AssetKind {
     Font,
     FormList,
     Image,
-    Level,
+    Level { is_loaded: bool },
     Material,
     Palette,
+    Script,
     UiContainer,
 }
 
@@ -44,12 +45,13 @@ impl LuaHandle {
 
     pub fn get_path(&self, asset_server: &AssetServer) -> Option<String> {
         match self.kind {
-            AssetKind::Font     => asset_server.get_handle_path(self.handle.typed_weak::<UIFont>()),
-            AssetKind::FormList => asset_server.get_handle_path(self.handle.typed_weak::<FormList>()),
-            AssetKind::Image    => asset_server.get_handle_path(self.handle.typed_weak::<Image>()),
-            AssetKind::Level    => asset_server.get_handle_path(self.handle.typed_weak::<Level>()),
-            AssetKind::Material => asset_server.get_handle_path(self.handle.typed_weak::<StandardMaterial>()),
-            AssetKind::Palette  => asset_server.get_handle_path(self.handle.typed_weak::<Palette>()),
+            AssetKind::Font        => asset_server.get_handle_path(self.handle.typed_weak::<UIFont>()),
+            AssetKind::FormList    => asset_server.get_handle_path(self.handle.typed_weak::<FormList>()),
+            AssetKind::Image       => asset_server.get_handle_path(self.handle.typed_weak::<Image>()),
+            AssetKind::Level {..}  => asset_server.get_handle_path(self.handle.typed_weak::<Level>()),
+            AssetKind::Material    => asset_server.get_handle_path(self.handle.typed_weak::<StandardMaterial>()),
+            AssetKind::Palette     => asset_server.get_handle_path(self.handle.typed_weak::<Palette>()),
+            AssetKind::Script      => asset_server.get_handle_path(self.handle.typed_weak::<LuaScript>()),
             AssetKind::UiContainer => asset_server.get_handle_path(self.handle.typed_weak::<ui::elem::Container>()),
         }.map(|p| p.path().to_string_lossy().to_string())
     }
@@ -59,7 +61,6 @@ impl LuaHandle {
             Some(self.handle.clone().typed())
         } else { None }
     }
-
     pub fn try_font(&self) -> Result<Handle<UIFont>, mlua::Error> {
         match self.kind {
             AssetKind::Font => Ok(self.handle.clone().typed()),
@@ -78,6 +79,13 @@ impl LuaHandle {
         match self.kind {
             AssetKind::Palette => Ok(self.handle.clone().typed()),
             _ => Err(mlua::Error::RuntimeError(format!("Unable to cast handle of kind {:?} to handle of Palette", self.kind))),
+        }
+    }
+
+    pub fn try_script(&self) -> Result<Handle<LuaScript>, mlua::Error> {
+        match self.kind {
+            AssetKind::Script => Ok(self.handle.clone().typed()),
+            _ => Err(mlua::Error::RuntimeError(format!("Unable to cast handle of kind {:?} to handle of Script", self.kind))),
         }
     }
 
@@ -105,7 +113,12 @@ impl From<Handle<Image>> for LuaHandle {
 }
 impl From<Handle<Level>> for LuaHandle {
     fn from(handle: Handle<Level>) -> Self {
-        LuaHandle { handle: handle.clone_untyped(), kind: AssetKind::Level }
+        LuaHandle { handle: handle.clone_untyped(), kind: AssetKind::Level { is_loaded: false } }
+    }
+}
+impl From<Handle<LoadedLevel>> for LuaHandle {
+    fn from(handle: Handle<LoadedLevel>) -> Self {
+        LuaHandle { handle: handle.clone_untyped(), kind: AssetKind::Level { is_loaded: true } }
     }
 }
 impl From<Handle<StandardMaterial>> for LuaHandle {
@@ -118,6 +131,11 @@ impl From<Handle<Palette>> for LuaHandle {
         LuaHandle { handle: handle.clone_untyped(), kind: AssetKind::Palette }
     }
 }
+impl From<Handle<LuaScript>> for LuaHandle {
+    fn from(handle: Handle<LuaScript>) -> Self {
+        LuaHandle { handle: handle.clone_untyped(), kind: AssetKind::Script }
+    }
+}
 impl From<Handle<ui::elem::Container>> for LuaHandle {
     fn from(handle: Handle<ui::elem::Container>) -> Self {
         LuaHandle { handle: handle.clone_untyped(), kind: AssetKind::UiContainer }
@@ -126,13 +144,14 @@ impl From<Handle<ui::elem::Container>> for LuaHandle {
 impl LuaUserData for LuaHandle {
     fn add_fields<'lua, F: mlua::UserDataFields<'lua, Self>>(fields: &mut F) {
         fields.add_field_method_get("kind", |_, this| Ok(match this.kind {
-            AssetKind::Font     => "font",
-            AssetKind::FormList => "formlist",
-            AssetKind::Image    => "image",
-            AssetKind::Level    => "level",
-            AssetKind::Material => "material",
-            AssetKind::Palette  => "palette",
-            AssetKind::UiContainer  => "uicontainer",
+            AssetKind::Font        => "font",
+            AssetKind::FormList    => "formlist",
+            AssetKind::Image       => "image",
+            AssetKind::Level {..}  => "level",
+            AssetKind::Material    => "material",
+            AssetKind::Palette     => "palette",
+            AssetKind::Script      => "script",
+            AssetKind::UiContainer => "uicontainer",
         }));
     }
 
@@ -151,9 +170,17 @@ impl LuaUserData for LuaHandle {
                     let assets = w.resource::<Assets<Image>>();
                     Ok(assets.contains(&this.handle.clone_weak().typed()))
                 },
-                AssetKind::Level => {
-                    let assets = w.resource::<Assets<Level>>();
-                    Ok(assets.contains(&this.handle.clone_weak().typed()))
+                AssetKind::Level { is_loaded } => {
+                    Ok(if is_loaded {
+                        let assets = w.resource::<Assets<LoadedLevel>>();
+                        assets.contains(&this.handle.clone_weak().typed())
+                    } else {
+                        let ll_cache = w.resource::<LoadedLevelCache>();
+                        if let Some(handle) = ll_cache.loaded_by_level.get(&this.handle.clone_weak().typed()) {
+                            let assets = w.resource::<Assets<LoadedLevel>>();
+                            assets.contains(handle)
+                        } else { false }
+                    })
                 },
                 AssetKind::Material => {
                     let assets = w.resource::<Assets<StandardMaterial>>();
@@ -161,6 +188,10 @@ impl LuaUserData for LuaHandle {
                 },
                 AssetKind::Palette => {
                     let assets = w.resource::<Assets<Palette>>();
+                    Ok(assets.contains(&this.handle.clone_weak().typed()))
+                },
+                AssetKind::Script => {
+                    let assets = w.resource::<Assets<LuaScript>>();
                     Ok(assets.contains(&this.handle.clone_weak().typed()))
                 },
                 AssetKind::UiContainer => {
@@ -183,9 +214,24 @@ impl LuaUserData for LuaHandle {
                         Ok(Some(asset.clone().to_lua(lua)?))
                     } else { Ok(None) }
                 },
-                AssetKind::Image => Err(LuaError::RuntimeError("Cannot load Image assets into Lua".to_string())),
-                AssetKind::Level => Err(LuaError::RuntimeError("Cannot load Level assets into Lua; see the Level module".to_string())),
-                AssetKind::Material => {
+                AssetKind::Image      => Err(LuaError::RuntimeError("Cannot load Image assets into Lua".to_string())),
+                AssetKind::Level { is_loaded } => {
+                    let assets = w.resource::<Assets<LoadedLevel>>();
+                    Ok(if is_loaded {
+                        let assets = w.resource::<Assets<LoadedLevel>>();
+                        if let Some(asset) = assets.get(&this.handle.clone().typed()) {
+                            Some(asset.clone().to_lua(lua)?)
+                        } else { None }
+                    } else {
+                        let ll_cache = w.resource::<LoadedLevelCache>();
+                        if let Some(handle) = ll_cache.loaded_by_level.get(&this.handle.clone_weak().typed()) {
+                            if let Some(asset) = assets.get(handle) {
+                                Some(asset.clone().to_lua(lua)?)
+                            } else { None }
+                        } else { None }
+                    })
+                },
+                AssetKind::Material   => {
                     if let Some(tex_mat_info) = w.get_resource::<TexMatInfo>() {
                         if let Some(texmat) = tex_mat_info.materials.get(&this.handle.clone().typed()) {
                             Ok(Some(texmat.clone().to_lua(lua)?))
@@ -200,6 +246,7 @@ impl LuaUserData for LuaHandle {
                         Ok(Some(asset.clone().to_lua(lua)?))
                     } else { Ok(None) }
                 },
+                AssetKind::Script      => Err(LuaError::RuntimeError("Cannot load Script assets into Lua".to_string())),
                 AssetKind::UiContainer => Err(LuaError::RuntimeError("Cannot load UiContainer assets into Lua".to_string())),
             }
         });
@@ -209,15 +256,15 @@ impl LuaUserData for LuaHandle {
             is_loaded(&w, this)
         });
         methods.add_method("on_load", |lua, this, f: LuaFunction| {
-            let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
+            let world = lua.globals().get::<_, LuaWorld>("world")?;
             if {
                 let w = world.read();
                 is_loaded(&w, this)?
             } {
                 f.call(this.clone_weak())
             } else {
-                let entity    = lua.globals().get::<_, LuaEntity>("entity").unwrap().0;
-                let script_id = lua.globals().get::<_, u32>("script_id").unwrap();
+                let entity    = lua.globals().get::<_, Option<LuaEntity>>("entity")?.map(|e| e.0);
+                let script_id = lua.globals().get::<_, u32>("script_id")?;
                 let key       = AssetEventKey {
                     entity, script_id, handle: this.clone(),
                 };
@@ -236,9 +283,9 @@ impl LuaUserData for LuaHandle {
             }
         });
         methods.add_method("path", |lua, this, ()| {
-            let world = lua.globals().get::<_, LuaWorld>("world").unwrap();
+            let world = lua.globals().get::<_, LuaWorld>("world")?;
             let w = world.read();
-            let asset_server = w.get_resource::<AssetServer>().unwrap();
+            let asset_server = w.resource::<AssetServer>();
             Ok(this.get_path(asset_server))
         });
         methods.add_method("weak", |_, this, ()| Ok(this.clone_weak()));

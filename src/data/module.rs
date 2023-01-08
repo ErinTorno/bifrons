@@ -1,6 +1,6 @@
 // it's not a mod, cause that's a reserved keyword
 
-use std::{collections::{HashMap}, path::Path, cmp::Ordering};
+use std::{collections::{HashMap, HashSet}, path::Path, cmp::Ordering};
 
 use bevy::{asset::{AssetLoader, LoadedAsset}, reflect::TypeUuid, prelude::{Component}};
 use indexmap::IndexMap;
@@ -89,6 +89,8 @@ pub struct Module {
     pub lines:           HashMap<String, HashMap<String, String>>,
     #[serde(default)]
     pub startup_scripts: Vec<String>,
+    #[serde(default)]
+    pub permissions:     HashSet<String>,
 }
 impl Module {
     pub fn is_version_valid(&self, version: VersionDependency) -> bool {

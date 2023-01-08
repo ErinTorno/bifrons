@@ -2,9 +2,10 @@
 use std::collections::HashMap;
 
 use bevy::{prelude::*};
+use indexmap::IndexMap;
 use iyes_loopless::prelude::IntoConditionalSystem;
 
-use crate::{data::{palette::*, material::{MaterialColors, MaterialsToInit}}, scripting::color::RgbaColor};
+use crate::{data::{palette::*, material::{MaterialColors, MaterialsToInit}, rgba::RgbaColor}};
 
 use super::{lua::{SharedInstances, ToInitScripts}};
 
@@ -93,7 +94,7 @@ fn setup_palette(
                 mats_to_init.0.extend(material_colors.by_handle.keys().map(|h| h.clone_weak()));
                 finish_loading(&mut commands, &mut palette_entity);
             } else if let Err(_) = query_to_init.get(entity) {
-                let mut handles = HashMap::new();
+                let mut handles = IndexMap::new();
                 handles.insert(lua_instances.gen_next_id(), asset_server.load(file));
                 commands.entity(entity)
                     .insert(ToInitScripts { handles });

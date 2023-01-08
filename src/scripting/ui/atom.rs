@@ -4,7 +4,7 @@ use bevy::prelude::{Resource, warn};
 use egui::text::LayoutJob;
 use mlua::prelude::*;
 
-use crate::{data::{lua::{LuaWorld, TransVar, ScriptVar}, palette::DynColor}, scripting::{LuaMod, color::RgbaColor}};
+use crate::{data::{lua::{LuaWorld, TransVar, ScriptVar}, palette::DynColor, rgba::RgbaColor}, scripting::{LuaMod}};
 
 use super::{text::TextBuilder, elem::TextInst};
 
@@ -121,25 +121,6 @@ pub struct LuaAtom {
     /// bool marking if the last_eval was updated rust side. If so, we'll update the lua value too.
     is_last_rust_eval: bool,
 }
-impl LuaMod for LuaAtom {
-    fn mod_name() -> &'static str { "Atom" }
-
-    fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
-        table.set("create", lua.create_function(|lua, val: LuaValue| {
-            let key          = lua.create_registry_value(val.clone())?;
-            let last_eval    = TransVar::from_lua(val, lua)?;
-            let acknowledged = false;
-
-            let world   = lua.globals().get::<_, LuaWorld>("world").unwrap();
-            let mut w   = world.write();
-            let mut reg = w.resource_mut::<LuaAtomRegistry>();
-            let index   = reg.atoms.len();
-            reg.atoms.push(LuaAtom { key, last_eval, acknowledged, is_last_rust_eval: false });
-            Ok(LuaAtomRef { index })
-        })?)?;
-        Ok(())
-    }
-}
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct LuaAtomRef {
@@ -147,6 +128,19 @@ pub struct LuaAtomRef {
 }
 impl LuaAtomRef {
     pub fn index(&self) -> usize { self.index }
+
+    pub fn create(val: LuaValue, lua: &Lua) -> mlua::Result<LuaAtomRef> {
+        let key          = lua.create_registry_value(val.clone())?;
+        let last_eval    = TransVar::from_lua(val, lua)?;
+        let acknowledged = false;
+
+        let world   = lua.globals().get::<_, LuaWorld>("world").unwrap();
+        let mut w   = world.write();
+        let mut reg = w.resource_mut::<LuaAtomRegistry>();
+        let index   = reg.atoms.len();
+        reg.atoms.push(LuaAtom { key, last_eval, acknowledged, is_last_rust_eval: false });
+        Ok(LuaAtomRef { index })
+    }
 
     pub fn get<'a>(&self, lua: &'a Lua) -> Result<LuaValue<'a>, mlua::Error> {
         let world   = lua.globals().get::<_, LuaWorld>("world").unwrap();
@@ -205,6 +199,14 @@ impl LuaUserData for LuaAtomRef {
         methods.add_method("get", |lua, this, ()|  this.get(lua));
         methods.add_method("map", |lua, this, f|   this.update(lua, f));
         methods.add_method("set", |lua, this, val| this.set(lua, val));
+    }
+}
+impl LuaMod for LuaAtomRef {
+    fn mod_name() -> &'static str { "Atom" }
+
+    fn register_defs(lua: &Lua, table: &mut LuaTable) -> Result<(), mlua::Error> {
+        table.set("create", lua.create_function(|lua, val: LuaValue| LuaAtomRef::create(val, lua))?)?;
+        Ok(())
     }
 }
 

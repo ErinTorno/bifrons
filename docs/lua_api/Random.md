@@ -2,9 +2,9 @@
 
 This module provides functions for getting random values.
 
-Values are generated using the [ChaCha algorithm with 8 rounds](https://rust-random.github.io/rand/rand_chacha/struct.ChaCha8Rng.html). The seed is reset on level change, and with the same seed and Random calls the same results will always be generated.
+Values are generated using the [ChaCha algorithm with 8 rounds](https://rust-random.github.io/rand/rand_chacha/struct.ChaCha8Rng.html) from a int seed. With the same seed and same order of Random calls the same results will always be generated.
 
-## bool
+## Random.bool
 ```lua
 Random.bool = function() -> bool
 ```
@@ -16,7 +16,7 @@ if Random.bool() then
 end
 ```
 
-## int
+## Random.int
 ```lua
 Random.int = function(min: int, max: int) -> int
 ```
@@ -27,9 +27,9 @@ local a = Random.int(0, 20)
 local b = Random.int(100, 999)
 ```
 
-## key
+## Random.key
 ```lua
-Random.key = function(table: table) -> any
+Random.key = function(table: table) -> any or nil
 ```
 Returns a random key from the table, or `nil` if it's empty.
 ```lua
@@ -37,16 +37,16 @@ local a = Random.key({a = 1, b = 2, c = 3})
 local b = Random.key({})
 ```
 
-## kv
+## Random.kv
 ```lua
-Random.kv = function(table: table) -> any, any
+Random.kv = function(table: table) -> any or nil, any or nil
 ```
 Returns a random key-value pair from the table, or `nil` if it's empty.
 ```lua
 local key, val = Random.kv({a = 1, b = 2, c = 3})
 ```
 
-## number
+## Random.number
 ```lua
 Random.number = function(min: number, max: number) -> number
 ```
@@ -57,9 +57,21 @@ local a = Random.number()
 local b = Random.number(0, 123)
 ```
 
-## value
+## Random.set_seed
 ```lua
-Random.value = function(table: table) -> any
+Random.set_seed = function(new_seed: int)
+```
+Sets the seed used for future random generations.
+
+## Random.true_random_seed
+```lua
+Random.true_random_seed = function()
+```
+Sets the seed to a new value randomly determined by [`rand::random::<u64>()`](https://docs.rs/rand/latest/rand/fn.random.html).
+
+## Random.value
+```lua
+Random.value = function(table: table) -> any or nil
 ```
 Returns a random value from the table, or `nil` if it's empty.
 ```lua

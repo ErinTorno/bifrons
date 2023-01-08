@@ -50,7 +50,24 @@ impl UIAssets {
 
 #[derive(Clone, Default, Resource)]
 pub struct UIStateCache {
-    pub elem_is_open: HashMap<egui::Id, bool>,
+    pub elem_bool_st: HashMap<egui::Id, bool>,
+}
+impl UIStateCache {
+    pub fn get_bool(&self, id: egui::Id, atom: OrAtom<bool>, def: bool, atom_reg: &mut LuaAtomRegistry) -> bool {
+        if let OrAtom::Val(b) = atom {
+            self.elem_bool_st.get(&id).cloned().unwrap_or(b)
+        } else {
+            atom_reg.acknowledge_or_else(atom, || def)
+        }
+    }
+
+    pub fn set_bool(&mut self, id: egui::Id, atom: OrAtom<bool>, new_val: bool, atom_reg: &mut LuaAtomRegistry) {
+        if let OrAtom::Atom(a) = atom {
+            atom_reg.set(a.clone(), new_val);
+        } else {
+            self.elem_bool_st.insert(id, new_val);
+        }
+    }
 }
 
 pub fn is_ui_focused(mut egui_ctx: ResMut<EguiContext>) -> bool {
@@ -286,9 +303,9 @@ pub fn run_containers(
                         }.response)
                     },
                     ElemKind::Window { id, title, is_closeable, is_open, is_resizable, has_scrollx, has_scrolly, children } => {
-                        let is_open_atom = env.atom_reg.acknowledge_or_else(*is_open, || true);
+                        let prev_is_open = env.ui_cache.get_bool(*id, *is_open, true, env.atom_reg);
 
-                        if is_open_atom {
+                        if prev_is_open {
                             let is_resizable  = env.atom_reg.acknowledge_or_else(*is_resizable, || false);
                             let is_closeable  = env.atom_reg.acknowledge_or_else(*is_closeable, || false);
                             let has_scrollx   = env.atom_reg.acknowledge_or_else(*has_scrollx, || false);
@@ -305,12 +322,12 @@ pub fn run_containers(
                                 .resizable(is_resizable)
                                 .scroll2([has_scrollx, has_scrolly]);
     
-                            let mut is_open_bool = is_open_atom;
+                            let mut cur_is_open = prev_is_open;
                             if is_closeable {
                                 if let OrAtom::Val(b) = is_open {
-                                    is_open_bool = env.ui_cache.elem_is_open.get(id).cloned().unwrap_or(*b);
+                                    cur_is_open = env.ui_cache.elem_bool_st.get(id).cloned().unwrap_or(*b);
                                 }
-                                window = window.open(&mut is_open_bool);
+                                window = window.open(&mut cur_is_open);
                             }
                             if title.is_none() {
                                 window = window.title_bar(false);
@@ -321,10 +338,13 @@ pub fn run_containers(
                                     (run_elem.f)(run_elem, child, env, ShowTo::Ui(ui));
                                 }
                             });
-                            if is_open_atom != is_open_bool && let OrAtom::Atom(a) = is_open {
-                                env.atom_reg.set(a.clone(), is_open_bool);
+                            if prev_is_open != cur_is_open {
+                                env.ui_cache.set_bool(*id, *is_open, cur_is_open, env.atom_reg);
+                            }
+                            if prev_is_open != cur_is_open && let OrAtom::Atom(a) = is_open {
+                                env.atom_reg.set(a.clone(), cur_is_open);
                             } else {
-                                env.ui_cache.elem_is_open.insert(*id, is_open_bool);
+                                env.ui_cache.elem_bool_st.insert(*id, cur_is_open);
                             }
                             opt_response.map(|r| r.response)
                         } else { None }

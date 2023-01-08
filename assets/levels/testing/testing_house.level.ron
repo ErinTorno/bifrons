@@ -1,5 +1,4 @@
 (
-    name:    "Testing House",
     scripts: [
         "levels/testing/testing_house.lua",
     ],
@@ -15,17 +14,26 @@
     materials: {
         // implicit "background" material that is a fill of the current background
         "floor": (
-            layer: Outline,
-            color: "purple",
-            texture: "tiles/floor_squiggle.png",
-            mode: Repeat(step: 2., on_step: Rotate180),
+            color:       "purple",
+            texture:     "tiles/floor_squiggle.png",
+            mode:        Repeat(step: (2., 2.), on_step: [
+                RotateRandom(quarters: 2),
+                AtlasRandom([(row: 0., col: 0.), (row: 0., col: 1.)]),
+            ]),
+            atlas:       (width: 0.5, height: 1.),
         ),
-        "siding": (layer: Outline, color: "purple", texture: "tiles/siding.png", mode: Repeat()),
-        "window": (
-            layer: Outline,
-            color: "icy",
-            texture:          "tiles/window.png",
-            mode: Repeat(step: 2.),
+        "siding": (color: "ferra", texture: "tiles/siding.png", mode: Repeat()),
+        "window_arch_bkg": (
+            color:       "background",
+            texture:     "tiles/window_arch.png",
+            atlas:       (width: 0.5, height: 1.),
+            mode:        Repeat(step: (2., 3)),
+        ),
+        "window_arch_out": (
+            color:       "teal",
+            texture:     "tiles/window_arch.png",
+            atlas:       (width: 0.5, height: 1.),
+            mode:        Repeat(step: (2., 3)),
             reflectance: 0.9,
         ),
     },
@@ -72,16 +80,16 @@
                     is_solid:  true,                       // should collision get generated for me? (defaults to false)
                 ),
                 (
-                    pos:       (-3.5, 0.35, 0.),
+                    pos:       (-3.5, 0.5, 0.),
                     shape:     Quad(w: 11., h: 1.),
                     rotation:  (0., 1.57079632679, 0.),
                     materials: ["background", "siding"],
                 ),
                 (
                     pos:       (-4., 2.25, 0.),
-                    shape:     Quad(w: 12., h: 2.),
+                    shape:     Quad(w: 2., h: 3.),
                     rotation:  (0., 1.57079632679, 0.),
-                    materials: ["window"],
+                    materials: ["window_arch_bkg", "window_arch_out"],
                 ),
             ],
             lights: [
@@ -96,7 +104,7 @@
                 // (
                 //     label: "foyer_lights",
                 //     pos: (0.17, 4., 2.5),
-                //     color: "yellow",
+                //     color: "cream",
                 //     shadows_enabled: true,
                 //     kind: Point(intensity: 6000.),
                 //     anim: Sin(period: 1.25, amplitude: 0.2, phase_shift: 0.785398163397),

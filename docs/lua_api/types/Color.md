@@ -38,10 +38,18 @@ Returns a completely transparent color.
 ```lua
 Color.__call = function(s: string) -> color
 ```
-Creates a color by parsing the given `s`, following the same logic as .ron DynColor deserialization. As the only param is a string, this is frequently called without parentheses.
+Creates a color by parsing the given string `s`. As the only param is a string, this is frequently called without parentheses.
+
+The following strings are valid colors:
+- `"background"`: the background color.
+- `"#8490d5ff"`: a sRGB(A) color; the final two chars for the alpha are optional, and default to `0xff`.
+- `"linear(r: 0.27, g: 0.09, b: 0.36, a: 1)"`: a linear SRGB(A) color; the alpha param `a` is optional, and defaults to 1.
+- `"const(#708f3f)"`: a constant sRGB(A) color.
+- `"const(linear(r: 0., g: 0., b: 0.))"`: a constant linear RGB(A) color.
 ```
 local r = Color("red")
 local g = Color "green" -- no () needed!
+local y = Color "#d5cb57"
 ```
 
 ## color:eval

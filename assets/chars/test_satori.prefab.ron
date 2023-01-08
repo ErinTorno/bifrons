@@ -1,0 +1,42 @@
+(
+    lines: {
+        "english": {
+            "name": "Satori",
+        },
+    },
+    animation: (
+        frames: {
+            "idle": [
+                (delay: 1., atlas: (row: 0, col: 0)),
+            ],
+        },
+        skeleton: (
+            name: "root",
+            children: [
+                (name: "head",       offset: (0.,   1.30, 0.)),
+                (name: "hand_left",  offset: (0.72, 0.52, 0.)),
+                (name: "hand_right", offset: (0.22, 0.52, 0.)),
+            ],
+        ),
+        parts: {
+            "bkg": Sprite(bone: (name: "root"), shape: Quad(w: 0.85, h: 1.7), material: "bkg", atlas_offset: (row: 0, col: 1)),
+            "out": Sprite(bone: (name: "root"), shape: Quad(w: 0.85, h: 1.7), material: "out"),
+        },
+        materials: {
+            "out": (
+                color:            "pink",    
+                texture:          "chars/test_satori_dnc.png",
+                normal_texture:   "chars/test_satori_n_dnc.png",
+                atlas:            (width: 0.5, height: 1.),
+                reflectance:      0.05,
+            ),
+            "bkg": (
+                color:            "background",
+                texture:          "chars/test_satori_dnc.png",
+                normal_texture:   "chars/test_satori_n_dnc.png",
+                atlas:            (rows: 1, columns: 2, width: 0.5, height: 1.),
+                unlit:            true,
+            ),
+        },
+    ),
+)

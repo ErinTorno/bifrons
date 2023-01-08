@@ -22,15 +22,14 @@
         },
         materials: {
             "bkg": (
-                atlas:          (rows: 1, columns: 2, width: 832, height: 1024),
+                atlas:          (width: 0.5, height: 1.),
                 texture:        "props/bones/goat_skull_creepy.png",
                 color:          "background",
             ),
             "out": (
-                atlas:          (rows: 1, columns: 2, width: 832, height: 1024),
+                atlas:          (width: 0.5, height: 1.),
                 texture:        "props/bones/goat_skull_creepy.png",
                 color:          "cream",
-                alpha_blend:    true,
             ),
         },
     ),

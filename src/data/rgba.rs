@@ -7,9 +7,7 @@ use mlua::prelude::*;
 use palette::{*, convert::FromColorUnclamped, rgb::{Rgba}};
 use serde::{de, Serialize, Deserialize, Deserializer, Serializer};
 
-use crate::{util::{IntoHex, RoughlyEq}, data::lua::{Any2}};
-
-use super::LuaMod;
+use crate::{util::{IntoHex, RoughlyEq}, data::lua::{Any2}, scripting::LuaMod};
 
 #[derive(Clone, Copy, Debug, Default, FromReflect, Inspectable, PartialEq, Reflect)]
 pub struct RgbaColor {
@@ -27,9 +25,9 @@ impl RgbaColor {
 
     pub fn as_linear(&self) -> RgbaColor {
         if self.is_linear {
-            self.clone()
+            *self
         } else {
-            if let Color::RgbaLinear { red, green, blue, alpha } = Color::from(self.clone()).as_rgba_linear() {
+            if let Color::RgbaLinear { red, green, blue, alpha } = Color::from(*self).as_rgba_linear() {
                 RgbaColor { r: red, g: green, b: blue, a: alpha, is_linear: true }
             } else { unreachable!() }
         }
@@ -88,12 +86,16 @@ impl RoughlyEq<RgbaColor> for RgbaColor {
     fn default_epsilon() -> Self::Epsilon { 0.0001 }
 
     fn roughly_eq_within(&self, that: &RgbaColor, epsilon: Self::Epsilon) -> bool {
-        let this = self;
-        let that = if self.is_linear { that.as_linear() } else { that.as_srgb() };
-        this.r.roughly_eq_within(&that.r, epsilon) &&
-        this.g.roughly_eq_within(&that.g, epsilon) &&
-        this.b.roughly_eq_within(&that.b, epsilon) &&
-        this.a.roughly_eq_within(&that.a, epsilon)
+        if self.a <= 0. && that.a <= 0. {
+            true
+        } else {
+            let this = self;
+            let that = if self.is_linear { that.as_linear() } else { that.as_srgb() };
+            this.r.roughly_eq_within(&that.r, epsilon) &&
+            this.g.roughly_eq_within(&that.g, epsilon) &&
+            this.b.roughly_eq_within(&that.b, epsilon) &&
+            this.a.roughly_eq_within(&that.a, epsilon)
+        }
     }
 }
 impl Hash for RgbaColor {
@@ -118,8 +120,9 @@ impl FromStr for RgbaColor {
                 .map(RgbaColor::from)
                 .map_err(|e| format!("{}", e))
         } else if s.starts_with("linear(") {
+            fn default_alpha() -> f32 { 1. }
             #[derive(Deserialize)]
-            struct Linear { r: f32, g: f32, b: f32, #[serde(default)] a: f32 }
+            struct Linear { r: f32, g: f32, b: f32, #[serde(default = "default_alpha")] a: f32 }
 
             let linear: Linear = ron::de::from_str(&s[6..]).map_err(|e| format!("RgbaColor linear deserialization error {}", e))?;
             Ok(RgbaColor { is_linear: true, r: linear.r, g: linear.g, b: linear.b, a: linear.a })
@@ -223,6 +226,13 @@ impl LuaMod for RgbaColor {
         table.set("black", lua.create_function(|_, ()| Ok(RgbaColor::BLACK))?)?;
         table.set("fuchsia", lua.create_function(|_, ()| Ok(RgbaColor::FUCHSIA))?)?;
         table.set("white", lua.create_function(|_, ()| Ok(RgbaColor::WHITE))?)?;
+
+        let meta = table.get_metatable().unwrap_or(lua.create_table()?);
+        meta.set(LuaMetaMethod::Call.name(), lua.create_function(|_, (_this, str): (LuaTable, String)| {
+            RgbaColor::from_str(str.as_str())
+                .map_err(|e| mlua::Error::RuntimeError(e))
+        })?)?;
+        table.set_metatable(Some(meta));
         Ok(())
     }
 }
@@ -318,5 +328,37 @@ impl FromColorUnclamped<RgbaColor> for Oklcha {
 impl FromColorUnclamped<RgbaColor> for Rgba {
     fn from_color_unclamped(val: RgbaColor) -> Self {
         Rgba::new(val.r, val.g, val.b, val.a)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use crate::util::RoughlyEq;
+
+    use super::RgbaColor;
+
+    fn assert_rgba(a: RgbaColor, b: RgbaColor) {
+        assert!(a.roughly_eq_within(&b, 0.01), "`{:?}` != `{:?}`", a, b);
+    }
+
+    #[test]
+    fn rgba_from_str() {
+        assert_rgba(RgbaColor::BLACK,   RgbaColor::from_str("#000000").unwrap());
+        assert_rgba(RgbaColor::BLACK,   RgbaColor::from_str("#000000ff").unwrap());
+        assert_rgba(RgbaColor::BLACK,   RgbaColor::from_str("linear(r: 0., g: 0., b: 0.)").unwrap());
+        assert_rgba(RgbaColor::BLACK,   RgbaColor::from_str("linear(r: 0., g: 0., b: 0., a: 1.)").unwrap());
+        assert_rgba(RgbaColor::FUCHSIA, RgbaColor::from_str("#8f57a3").unwrap());
+        assert_rgba(RgbaColor::FUCHSIA, RgbaColor::from_str("#8f57a3ff").unwrap());
+        assert_rgba(RgbaColor::FUCHSIA, RgbaColor::from_str("linear(r: 0.2738, g: 0.0946, b: 0.3672)").unwrap());
+        assert_rgba(RgbaColor::FUCHSIA, RgbaColor::from_str("linear(r: 0.2738, g: 0.0946, b: 0.3672, a: 1.)").unwrap());
+        assert_rgba(RgbaColor::WHITE,   RgbaColor::from_str("#ffffff").unwrap());
+        assert_rgba(RgbaColor::WHITE,   RgbaColor::from_str("#ffffffff").unwrap());
+        assert_rgba(RgbaColor::WHITE,   RgbaColor::from_str("linear(r: 1., g: 1., b: 1.)").unwrap());
+        assert_rgba(RgbaColor::WHITE,   RgbaColor::from_str("linear(r: 1., g: 1., b: 1., a: 1.)").unwrap());
+        assert_rgba(RgbaColor::TRANSPARENT, RgbaColor::from_str("#00000000").unwrap());
+        assert_rgba(RgbaColor::TRANSPARENT, RgbaColor::from_str("#ffffff00").unwrap());
+        assert_rgba(RgbaColor::TRANSPARENT, RgbaColor::from_str("#8f57a300").unwrap());
     }
 }

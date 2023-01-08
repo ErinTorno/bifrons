@@ -24,6 +24,7 @@ Returns the asset that this handle is referencing if its loaded, or `nil` otherw
 
 The following assets support this operation; all others will error.
 - formlist
+- level
 - material
 - palette
 

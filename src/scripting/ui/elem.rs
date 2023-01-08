@@ -8,7 +8,7 @@ use mlua::prelude::*;
 
 use crate::{data::{lua::{LuaWorld, Any3}, palette::DynColor}, scripting::{bevy_api::{math::LuaVec2, handle::LuaHandle}, LuaMod}};
 
-use super::{atom::OrAtom, text::TextBuilder};
+use super::{atom::{OrAtom}, text::TextBuilder};
 
 #[derive(Clone, Debug, Default, Resource)]
 pub struct VisibleContainers(pub HashSet<HandleId>);

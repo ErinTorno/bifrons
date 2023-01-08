@@ -34,13 +34,14 @@ end
 
 ## material.alpha_blend
 ```lua
-material.alpha_blend: bool
+material.alpha_blend: bool or nil
 ```
 Whether to apply alpha blending to the material's image.
 - `true` will blend transparent pixels in images with those behind them. This allows full use of all values of transparency.
 
   Many images using alpha blending layered on each other may render in the incorrect order. This is likely an engine bug. To avoid this, you are recommended to have your alpha blending materials backed by the `"background"` or a non-alpha blending layer.
 - `false` will reduce transparent pixels to either full opaque or fully transparent. This might impact the quality for images making use of partial transparency, but is useful for performance reasons and to reduce the chance of layer rendering issues.
+- `nil` will default to `material.color ~= Color.background`
 
 ## material.atlas
 ```lua
@@ -122,27 +123,15 @@ Defines how a larger image might be broken up into smaller ones.
 
 ## Atlas.new
 ```lua
-Atlas.new = function(rows: number, columns: number, width: number, height: number) -> atlas
+Atlas.new = function(width: number, height: number, offset: vec2 or nil) -> atlas
 ```
-Creates a new atlas for an image with `rows * columns` cells of `width * height` pixels dimensions.
-```lua
-local a = Atlas.new(4, 10, 256, 512)
-```
+Creates a new atlas for an image starting at `offset` with each cell being `width * height`.
 
-## atlas.columns
+All units are UV coordinates, with a 1.0 being the image's full `width` or `height`, 0.5 being half, 0.25 a fourth, and so on. `1 / num_of_rows_or_cols` can be used to calculate the dimensions of the cells. 
 ```lua
-atlas.rows: number
-```
-
-## atlas.width
-```lua
-atlas.width: number
-```
-Cell width in pixels.
-
-## atlas.rows
-```lua
-atlas.rows: number
+local full     = Atlas.new(1, 1)
+local atlas4x3 = Atlas.new(1/4, 1/3)
+local offseted = Atlas.new(0.5, 1, Vec.new(0.5, 1))
 ```
 
 ## atlas.height
@@ -150,6 +139,19 @@ atlas.rows: number
 atlas.height: number
 ```
 Cell height in pixels.
+
+## atlas.offset
+```lua
+atlas.offset: vec2
+```
+Offset as a [vec2](Vec2.md) in pixels to start of cells in the texture.
+
+## atlas.width
+```lua
+atlas.width: number
+```
+Cell width in pixels.
+```
 
 ## atlas:__eq
 ```lua
@@ -167,13 +169,21 @@ Defines how a material is displayed across a surface.
 
 ## MatMode.repeat
 ```lua
-MatMode.repeat = function { step = number, mode = "identity" or "rotate180" } -> matmode
+MatMode.repeat = function { step = vec2, ops = array<{op = string, ...}> } -> matmode
 ```
-Material will repeat across every `step` units of distance, applying the `mode` operation each time.
-- `"identity"`: repeat the same image each time.
-- `"rotate180"`: rotate the image by 180° each iteration. This can help break up repetition.
+Material will repeat across every `step` units of distance, applying the `ops` sequentially by each `row` table.
 
-Any key not assigned by the table will use its default value. (`step` as 1.0, `mode` as `"identity"`).
+The following are valid `op` strings.
+- `"atlasrandom"`: randomly determines which image cell in the atlas to use each iteration. `row` also expects an array section to determine the atlas indices. The following types of indices are supported:
+  - `{ row = number, col = number }`
+  - [vec2](Vec2.md), where `x` is col and `y` is row.
+- `"identity"`: repeat the same image each time.
+- `"rotate"`: rotate the image each iteration. This can help break up repetitive textures. `row` also has the following properties:
+  - `quarters = int`: how many quarter turns to make each iteration.
+- `"rotaterandom"`: as `"rotate"`, but instead of every other, it randomly decides per each iteration. `row` also has the following properties:
+  - `quarters = int`: how many quarter turns to make each coin flip.
+
+Any key not assigned by the table will use its default value. (`step` as [`Vec2.one()`](Vec2.md#vec2one), `ops` as `{}`).
 
 ## MatMode.stretch
 ```lua

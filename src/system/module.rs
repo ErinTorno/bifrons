@@ -1,9 +1,10 @@
 use std::{collections::{HashMap, VecDeque}, fs::File, io::Write, path::PathBuf};
 use bevy::{prelude::{*}, asset::{FileAssetIo, LoadState}};
+use indexmap::IndexMap;
 use iyes_loopless::prelude::IntoConditionalSystem;
 use ron::ser::PrettyConfig;
 
-use crate::{data::{module::{Module, ModuleLoader, ModList, ModEntry}, lua::LuaScript, assetio::{VirtualFileOverrides}}, system::lua::ToInitScripts};
+use crate::{data::{module::{Module, ModuleLoader, ModList, ModEntry}, lua::LuaScript, assetio::{VirtualFileOverrides}}, system::lua::ToInitScripts, util::ron_options};
 
 use super::lua::{SharedInstances, LuaQueue};
 
@@ -55,7 +56,7 @@ pub fn setup_modlist(
             Err(e)   => panic!("Unable to open {}: {}", THIS_MODLIST_FILE, e),
         };
 
-        loaded_ml.modlist = match ron::de::from_bytes(&bytes) {
+        loaded_ml.modlist = match ron_options().from_bytes(&bytes) {
             Ok(file) => file,
             Err(e)   => panic!("Unable to deserialize {}: {}", THIS_MODLIST_FILE, e),
         };
@@ -144,10 +145,13 @@ pub fn load_mods(
                             let handle = loaded_ml.handles.get(mod_name).unwrap();
                             let module = mods.get(handle).unwrap();
 
-                            let handles: HashMap<u32, Handle<LuaScript>> = module.startup_scripts.iter()
+                            let handles: IndexMap<u32, Handle<LuaScript>> = module.startup_scripts.iter()
                                 .map(|s| (lua_instances.gen_next_id(), asset_server.load(s)))
                                 .collect();
-                            commands.spawn(ToInitScripts { handles }).id()
+                            commands.spawn((
+                                LuaQueue::default(),
+                                ToInitScripts { handles },
+                            )).id()
                         }).collect();
                     } else {
                         commands.remove_resource::<ModLoadState>();

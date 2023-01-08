@@ -1,18 +1,16 @@
 use bevy::{prelude::*};
 use mlua::prelude::*;
 
-use crate::{data::{stat::{Stat, Pool}, material::{TextureMaterial,}, input::ActionState, formlist::{FormList, InjectCommands}, geometry::{Light, LightAnim, LightKind}, lua::{ScriptVar, LuaWorld}, palette::{Palette, DynColor}, assetio::VirtualFileOverrides}};
+use crate::{data::{stat::{Stat, Pool}, material::{TextureMaterial,}, input::ActionState, formlist::{FormList, InjectCommands}, geometry::{Light, LightAnim, LightKind}, lua::{LuaWorld, TransVar}, palette::{Palette, DynColor}, assetio::VirtualFileOverrides, level::LoadedLevel, rgba::RgbaColor}};
 
-use self::{color::RgbaColor, time::LuaTime, entity::{LuaQuery, EntityAPI}, level::LevelAPI, random::RandomAPI, log::LogAPI, bevy_api::{math::{LuaVec2, LuaVec3, MathAPI}, image::ImageAPI}, ui::{elem::{UIAPI}, atom::{LuaAtom}, text::{TextBuilder, TextStyle}, font::UIFont}, file::FileAPI};
+use self::{time::LuaTime, query::{LuaQuery}, random::RandomAPI, log::LogAPI, bevy_api::{math::{LuaVec2, LuaVec3, MathAPI}, image::ImageAPI}, ui::{elem::{UIAPI}, atom::{LuaAtomRef}, text::{TextBuilder, TextStyle}, font::UIFont}, file::FileAPI, message::MessageBuilder};
 
 pub mod bevy_api;
-pub mod color;
-pub mod entity;
 pub mod event;
 pub mod file;
-pub mod level;
 pub mod log;
 pub mod message;
+pub mod query;
 pub mod random;
 pub mod time;
 pub mod ui;
@@ -22,27 +20,27 @@ pub fn register_lua_mods(lua: &Lua) -> Result<(), LuaError> {
     init_luamod::<DynColor>(lua)?;
     init_luamod::<UIFont>(lua)?;
     init_luamod::<FormList>(lua)?;
-    init_luamod::<EntityAPI>(lua)?;
     init_luamod::<FileAPI>(lua)?;
     init_luamod::<ImageAPI>(lua)?;
     init_luamod::<InjectCommands>(lua)?;
-    init_luamod::<LuaAtom>(lua)?;
+    init_luamod::<LuaAtomRef>(lua)?;
     init_luamod::<LuaQuery>(lua)?;
     init_luamod::<LuaTime>(lua)?;
     init_luamod::<LuaVec2>(lua)?;
     init_luamod::<LuaVec3>(lua)?;
-    init_luamod::<LevelAPI>(lua)?;
     init_luamod::<Light>(lua)?;
     init_luamod::<LightAnim>(lua)?;
     init_luamod::<LightKind>(lua)?;
+    init_luamod::<LoadedLevel>(lua)?;
     init_luamod::<LogAPI>(lua)?;
     init_luamod::<MathAPI>(lua)?;
+    init_luamod::<MessageBuilder>(lua)?;
     init_luamod::<Palette>(lua)?;
     init_luamod::<RandomAPI>(lua)?;
-    init_luamod::<ScriptVar>(lua)?;
     init_luamod::<TextBuilder>(lua)?;
     init_luamod::<TextStyle>(lua)?;
     init_luamod::<TextureMaterial>(lua)?;
+    init_luamod::<TransVar>(lua)?;
     init_luamod::<Pool>(lua)?;
     init_luamod::<RgbaColor>(lua)?;
     init_luamod::<Stat>(lua)?;

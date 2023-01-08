@@ -35,7 +35,6 @@
         materials: {
             "outline": (
                 texture:     "props/furniture/end_table.png", // equiv to "props/furniture/end_table.gltf#Texture0"
-                alpha_blend: true,
                 color:       "sand",
             ),
         },

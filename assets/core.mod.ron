@@ -8,6 +8,21 @@
         },
     },
     startup_scripts: [
+        "systems/registry.lua",
+        "systems/content.lua",
         "systems/startup.lua",
     ],
 )
+// Also perfectly useable formatting, and more compact!
+// ( version:  (0,1,0)
+// , priority: -999999999.
+// , lines:
+//     { "english":
+//         { "name": "Core"
+//         , "desc": "The base game loaded from content at the root of ./assets"
+//         }
+//     }
+// , startup_scripts:
+//     [ "systems/startup.lua"
+//     ]
+// )

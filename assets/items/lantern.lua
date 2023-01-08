@@ -27,11 +27,11 @@ function set_lit(is_lit)
         fire:apply(handles.fire)
 
         if g_light then
-            Entity.show(g_light)
+            g_light:show()
         end
     else
         if g_light then
-            Entity.hide(g_light)
+            g_light:hide()
         end
 
         local handles = Material.handle_table(entity)
@@ -70,7 +70,7 @@ end
 
 function on_use(ctx)
     local target = ctx.target
-    local tags = Entity.tags(target)
+    local tags = target:tags()
     if tags.monster then
         Prompt.new("throw", function()
             Log.info("todo")
